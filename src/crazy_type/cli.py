@@ -64,6 +64,8 @@ def build_parser() -> argparse.ArgumentParser:
             "  crazytype --demo\n"
             "  crazytype effects\n"
             "  crazytype doctor --json\n"
+            "  crazytype play giant-growth \"Hello\"\n"
+            "  crazytype blocks --json\n"
             "\nSet CRAZYTYPE_PLAIN=1 or pass --plain to disable animation. "
             "NO_COLOR, CI, dumb terminals and reduced-motion preferences are respected."
         ),
@@ -93,7 +95,7 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-_SUBCOMMANDS = ("effects", "doctor")
+_SUBCOMMANDS = ("effects", "doctor", "play", "blocks")
 
 
 def parse_subcommand(argv: list[str]) -> int | None:
@@ -106,6 +108,17 @@ def parse_subcommand(argv: list[str]) -> int | None:
     if not argv or argv[0] not in _SUBCOMMANDS or argv[0].startswith("-"):
         return None
     command = argv[0]
+    if command == "play":
+        sub = argparse.ArgumentParser(prog="crazytype play")
+        sub.add_argument("recipe", help="Recipe file (.json) to play.")
+        sub.add_argument("text", nargs="?", help="Text to animate. Reads piped stdin when omitted.")
+        sub_args = sub.parse_args(argv[1:])
+        return cmd_play(sub_args.recipe, sub_args.text)
+    if command == "blocks":
+        sub = argparse.ArgumentParser(prog="crazytype blocks")
+        sub.add_argument("--json", action="store_true", help="Machine-readable block catalogue.")
+        sub_args = sub.parse_args(argv[1:])
+        return cmd_blocks(sub_args.json)
     sub = argparse.ArgumentParser(prog=f"crazytype {command}")
     sub.add_argument("--json", action="store_true", help="Machine-readable JSON output (no ANSI codes).")
     sub_args = sub.parse_args(argv[1:])
@@ -175,6 +188,53 @@ def cmd_doctor(as_json: bool) -> int:
     else:
         for key, value in payload.items():
             print(f"{key}: {value}")
+    return 0
+
+
+def cmd_play(recipe_source: str, arg_text: str | None) -> int:
+    from .recipe import RecipeError, load_recipe
+    from .runtime import play_recipe
+
+    try:
+        recipe = load_recipe(_builtin_or_path(recipe_source))
+    except RecipeError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    raw = read_input(arg_text)
+    if raw is None:
+        print("error: no input. Give text or pipe it in. See 'crazytype play --help'.", file=sys.stderr)
+        return 2
+    text = raw.strip("\n")
+    if not text.strip():
+        print("error: no input (empty text).", file=sys.stderr)
+        return 1
+    return play_recipe(recipe, text)
+
+
+def _builtin_or_path(source: str) -> str:
+    """Allow bundled recipe names ('giant-growth') as shorthand for their files."""
+    import importlib.resources
+
+    try:
+        bundled = importlib.resources.files("crazy_type") / "recipes" / f"{source}.json"
+        if bundled.is_file():
+            return str(bundled)
+    except Exception:  # noqa: BLE001 - fall through to plain path handling
+        pass
+    return source
+
+
+def cmd_blocks(as_json: bool) -> int:
+    from .recipe import BLOCK_SPECS, block_catalogue
+
+    if as_json:
+        print(json.dumps(block_catalogue(), indent=2))
+        return 0
+    print("Recipe blocks (see 'crazytype blocks --json' for the machine-readable catalogue):\n")
+    for kind, spec in BLOCK_SPECS.items():
+        print(f"  {kind} - {spec['help']}")
+    print("\nBundled recipes: giant-growth, living-neon, particle-reconstruction")
+    print("Try: crazytype play giant-growth \"Hello\"")
     return 0
 
 
