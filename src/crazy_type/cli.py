@@ -190,7 +190,7 @@ def cmd_demo() -> int:
             if code != 0:
                 return code
             try:
-                answer = input()
+                answer = input("[Enter]=next effect  q=quit ")
             except EOFError:
                 break
             if answer.strip().lower() in {"q", "quit", "exit"}:
