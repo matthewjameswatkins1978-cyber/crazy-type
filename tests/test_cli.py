@@ -125,3 +125,38 @@ def test_real_engine_smoke_and_cleanup(capsys):
     out = capsys.readouterr().out
     assert "\x1b[?25h" in out  # show-cursor: terminal cleanup happened
     assert "H" in out and "i" in out
+
+
+def test_demo_flow_quit_after_first(monkeypatch, capsys):
+    # Drive the interactive demo: fake a TTY, answer 'q' at the first prompt.
+    # Renders one real effect, then quits cleanly with cursor restored.
+    from unittest import mock
+
+    answers = iter(["q"])
+    with (
+        mock.patch.object(sys.stdout, "isatty", return_value=True),
+        mock.patch("builtins.input", side_effect=lambda *a, **k: next(answers)),
+    ):
+        code = cli.cmd_demo()
+    out = capsys.readouterr().out
+    assert code == 0
+    assert out.count("--- ") == 1
+    assert "\x1b[?25h" in out
+    assert "That's Crazy Type" in out
+
+
+def test_demo_refuses_non_tty(monkeypatch, capsys):
+    monkeypatch.setattr(sys.stdout, "isatty", lambda: False)
+    assert cli.cmd_demo() == 1
+    assert "interactive terminal" in capsys.readouterr().err
+
+
+def test_figlet_banner_animates(capsys):
+    # A multi-line figlet banner must render through the real engine.
+    banner = runner.apply_figlet("Hi", "slant")
+    assert len(banner.splitlines()) > 1
+    code = runner.play_animation(banner, "decrypt")
+    assert code == 0
+    out = capsys.readouterr().out
+    assert "\x1b[?25h" in out
+    assert "/" in out and "_" in out
