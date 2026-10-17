@@ -96,7 +96,7 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-_SUBCOMMANDS = ("effects", "doctor", "play", "blocks", "studio")
+_SUBCOMMANDS = ("effects", "doctor", "play", "blocks", "studio", "export")
 
 
 def parse_subcommand(argv: list[str]) -> int | None:
@@ -120,10 +120,19 @@ def parse_subcommand(argv: list[str]) -> int | None:
         sub.add_argument("recipe", nargs="?", help="Recipe name or .json path to open (blank if omitted).")
         sub_args = sub.parse_args(argv[1:])
         return cmd_studio(sub_args.recipe)
+    if command == "blocks":
         sub = argparse.ArgumentParser(prog="crazytype blocks")
         sub.add_argument("--json", action="store_true", help="Machine-readable block catalogue.")
         sub_args = sub.parse_args(argv[1:])
         return cmd_blocks(sub_args.json)
+    if command == "export":
+        sub = argparse.ArgumentParser(prog="crazytype export")
+        sub.add_argument("recipe", help="Recipe name or .json path.")
+        sub.add_argument("text", nargs="?", help="Text to perform. Reads piped stdin when omitted.")
+        sub.add_argument("--recipe", dest="recipe_out", default=None, help="Write validated recipe JSON here.")
+        sub.add_argument("--cast", dest="cast_out", default=None, help="Write asciicast v2 recording here.")
+        sub_args = sub.parse_args(argv[1:])
+        return cmd_export(sub_args.recipe, sub_args.text, sub_args.recipe_out, sub_args.cast_out)
     sub = argparse.ArgumentParser(prog=f"crazytype {command}")
     sub.add_argument("--json", action="store_true", help="Machine-readable JSON output (no ANSI codes).")
     sub_args = sub.parse_args(argv[1:])
@@ -241,6 +250,29 @@ def cmd_blocks(as_json: bool) -> int:
     print("\nBundled recipes: giant-growth, living-neon, particle-reconstruction")
     print("Try: crazytype play giant-growth \"Hello\"")
     return 0
+
+
+def cmd_export(recipe_arg: str, arg_text: str | None, recipe_out: str | None, cast_out: str | None) -> int:
+    from .export import export_recipe
+    from .recipe import RecipeError, load_recipe
+
+    try:
+        recipe = load_recipe(_builtin_or_path(recipe_arg))
+    except RecipeError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    if cast_out is None and recipe_out is None:
+        print("error: give --recipe and/or --cast output paths. See 'crazytype export --help'.", file=sys.stderr)
+        return 2
+    raw = read_input(arg_text)
+    if raw is None:
+        print("error: no input. Give text or pipe it in.", file=sys.stderr)
+        return 2
+    text = raw.strip("\n")
+    if not text.strip():
+        print("error: no input (empty text).", file=sys.stderr)
+        return 1
+    return export_recipe(recipe, text, recipe_out, cast_out)
 
 
 def cmd_studio(recipe_arg: str | None) -> int:

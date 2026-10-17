@@ -224,14 +224,17 @@ def restore() -> None:
         pass
 
 
-def play_recipe(recipe: dict[str, Any], text: str) -> int:
+def play_recipe(recipe: dict[str, Any], text: str, force_animate: bool = False) -> int:
     """Play a validated recipe. Returns a process exit code."""
     from .terms import should_animate
 
     if recipe.get("format_version") != RECIPE_FORMAT_VERSION:
         print("error: unsupported recipe format.", file=sys.stderr)
         return 2
-    animate, reason = should_animate()
+    if force_animate:
+        animate, reason = True, "export recording"
+    else:
+        animate, reason = should_animate()
     if not animate:
         print(f"[crazytype] plain text ({reason})", file=sys.stderr)
         print(text)

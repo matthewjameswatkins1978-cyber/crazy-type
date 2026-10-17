@@ -44,6 +44,10 @@ uv run crazytype "Hello world"
 | `crazytype effects [--json]` | List all effects, human or machine readable |
 | `crazytype doctor [--json]` | Environment diagnostics |
 | `crazytype --version` | Version |
+| `crazytype studio [recipe]` | Keyboard-first visual editor: remix blocks, preview, save |
+| `crazytype play <recipe> [text]` | Play a recipe file (bundled names work too) |
+| `crazytype blocks [--json]` | Recipe block catalogue for humans and AI agents |
+| `crazytype export <recipe> [text] --recipe/--cast` | Export validated recipe / asciicast recording |
 
 Exit codes: `0` success · `1` runtime error / empty input · `2` usage error · `130` interrupted (Ctrl+C).
 
@@ -55,6 +59,18 @@ model call, server or account is ever required.
 Some upstream effects are long-form by design (notably `matrix`, which can
 run for many minutes) — the `--demo` showcase sticks to snappy ones so it
 finishes in about a minute.
+
+## Recipes, Studio and embedding
+
+A Recipe (versioned JSON) describes an effect independently of any editor:
+`crazytype play giant-growth "Hello"` plays a bundled recipe; any `.json`
+recipe file works too. `crazytype blocks --json` is the machine-readable block
+catalogue AI agents build recipes from. `crazytype studio [recipe]` opens the
+keyboard-first editor (pick a block, tweak a value, `p` to preview with the
+exact runtime the CLI uses, `s` to save). `crazytype export` writes a
+validated recipe envelope or an asciicast v2 recording (with its recorded
+terminal size) for sharing and embedding. Embed via CLI subprocess, the
+`crazy_type.runtime.play_recipe` API, or a recording — see `docs/DECISIONS.md`.
 
 ## Credits
 

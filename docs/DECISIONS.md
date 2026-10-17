@@ -47,3 +47,21 @@ is deferred until evidence demands it.
 Studio milestone; textual is the leading candidate). The Player/Runtime stays
 TTE + stdlib so embedding never drags in editor frameworks. v0.1.1 CLI behaviour
 and its 41 tests remain the untouched baseline throughout.
+
+## ADR-5 (2026-10-17): Studio v1 is stdlib-only, preview shares the runtime
+
+**Decision:** `crazy_type/studio.py` uses only the standard library
+(alt-screen + `msvcrt`/`termios` keys) so the whole project stays
+dependency-light. The editor mutates the same validated recipe model the CLI
+plays, and preview calls `runtime.play_recipe` directly — preview and playback
+cannot drift. Undo/redo are validated snapshots; all exit paths restore the
+terminal. Known limitation: preview temporarily takes over the screen rather
+than playing in a bounded region; bounded-region preview is a later milestone.
+
+## ADR-6 (2026-10-17): Export = recipe envelope + asciicast recording
+
+**Decision:** Two honest formats. Editable Recipe: the validated `.json`
+(openable by any Crazy Type install). ANSI Recording: asciicast v2 captured
+from a real paced playback, stamped with its terminal size, cursor restore
+included. No standalone-binary or TTE-free export is promised: TTE effects
+need their runtime, and the recording header says so by construction.
