@@ -135,6 +135,52 @@ def test_giant_growth_ends_on_word(monkeypatch, capsys):
     assert "GROW" in re.sub(r"\x1b\[[0-9;?]*[A-Za-z]", "", out)
 
 
+def _emulate_screen(raw):
+    """Minimal terminal model: cursor-up, line writes and newlines only."""
+    import re
+
+    rows = {}
+    row = 0
+    for chunk in re.split(r"(\x1b\[\d+A)", raw):
+        match = re.fullmatch(r"\x1b\[(\d+)A", chunk)
+        if match:
+            row = max(0, row - int(match.group(1)))
+            continue
+        clean = re.sub(r"\x1b\[[0-9;?]*[A-Za-z]|\x1b[()][AB0]|\x1b[78]|\x1b\?25[hl]", "", chunk)
+        parts = clean.split("\n")
+        for line in parts[:-1]:
+            rows[row] = line
+            row += 1
+        if parts[-1]:
+            rows[row] = parts[-1]
+    return rows
+
+
+def test_grow_repaints_full_region_without_residue(monkeypatch, capsys):
+    """Shrinking big -> mini must not leave tall-stage rows on screen."""
+    data = {
+        "format_version": 1,
+        "name": "t",
+        "blocks": [{"kind": "grow", "fonts": ["mini", "standard", "big"], "hold_seconds": 0, "end": "word"}],
+    }
+    code, out, _plain = _play_headless(monkeypatch, capsys, recipe.validate_recipe(data), "Hi")
+    assert code == 0
+    visible = sorted(v for v in _emulate_screen(out).values() if v.strip())
+    assert visible == ["Hi"]
+
+
+def test_grow_clear_leaves_blank_region(monkeypatch, capsys):
+    data = {
+        "format_version": 1,
+        "name": "t",
+        "blocks": [{"kind": "grow", "fonts": ["mini", "standard", "big"], "hold_seconds": 0, "end": "clear"}],
+    }
+    code, out, _plain = _play_headless(monkeypatch, capsys, recipe.validate_recipe(data), "Hi")
+    assert code == 0
+    visible = [v for v in _emulate_screen(out).values() if v.strip()]
+    assert visible == []
+
+
 def test_ambient_settles_readable(monkeypatch, capsys):
     data = {
         "format_version": 1,

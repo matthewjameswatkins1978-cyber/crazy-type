@@ -122,37 +122,43 @@ class Pipeline:
             print(text)
             return
         clear_width = max(len(line) for stage in stages for line in stage)
+        region_height = max(len(stage) for stage in stages)
 
         def show(stage: list[str]) -> None:
+            # Every stage repaints the whole region (text rows + blanks)
+            # so a shorter stage fully overwrites a taller one — no
+            # leftover FIGlet rows on screen.
             for line in stage:
                 sys.stdout.write(line.ljust(clear_width) + "\n")
+            for _ in range(region_height - len(stage)):
+                sys.stdout.write(" " * clear_width + "\n")
             sys.stdout.flush()
 
-        def hide(nlines: int) -> None:
-            sys.stdout.write(f"\x1b[{nlines}A")
+        def hide() -> None:
+            sys.stdout.write(f"\x1b[{region_height}A")
             sys.stdout.flush()
 
         show(stages[0])
-        current = stages[0]
         for stage in stages[1:]:
             time.sleep(0.35)
-            hide(len(current))
+            hide()
             show(stage)
-            current = stage
         time.sleep(hold_seconds)
         for stage in reversed(stages[:-1]):
             time.sleep(0.35)
-            hide(len(current))
+            hide()
             show(stage)
-            current = stage
+        hide()
         if end == "clear":
-            hide(len(stages[0]))
-            for _ in range(len(stages[0])):
+            for _ in range(region_height):
                 sys.stdout.write(" " * clear_width + "\n")
-            hide(len(stages[0]))
+            hide()
         else:
-            hide(len(stages[0]))
+            # The word replaces the region top; blank the rest so no
+            # stage rows survive below it.
             sys.stdout.write(text + "\n")
+            for _ in range(region_height - 1):
+                sys.stdout.write(" " * clear_width + "\n")
         sys.stdout.flush()
 
     def run_ambient(self, text: str, duration: float, fps: int, seed: int | None) -> None:
