@@ -79,6 +79,47 @@ def test_save_and_reload(tmp_path):
     assert json.loads(target.read_text(encoding="utf-8"))["name"] == "t"
 
 
+def test_studio_remix_save_play_round_trip(monkeypatch, capsys, tmp_path):
+    """Studio opens giant-growth, remixes a param, saves; the saved file
+    validates and plays headless on the fixed runtime."""
+    import re
+    import sys
+    from unittest import mock
+
+    from crazy_type.cli import _builtin_or_path
+    from crazy_type.recipe import load_recipe
+    from crazy_type.runtime import play_recipe
+    from crazy_type.studio import Studio, handle_key
+
+    out = io.StringIO()
+    state = Studio(load_recipe(_builtin_or_path("giant-growth")))
+    assert state.recipe["blocks"][0]["hold_seconds"] == 0.8
+    assert handle_key(state, "enter", out) is None  # blocks -> edit screen
+    assert state.screen == "edit"
+    state.set_param("hold_seconds", "0")  # same method the edit screen calls
+    assert state.recipe["blocks"][0]["hold_seconds"] == 0
+    assert state.dirty
+    state.undo()
+    assert state.recipe["blocks"][0]["hold_seconds"] == 0.8
+    state.redo()
+    assert state.recipe["blocks"][0]["hold_seconds"] == 0
+    assert handle_key(state, "esc", out) is None
+    target = tmp_path / "remix.json"
+    state.save(str(target))
+    assert "saved to" in state.status
+    assert not state.dirty
+    reloaded = load_recipe(str(target))
+    assert reloaded["blocks"][0]["hold_seconds"] == 0
+
+    buf = io.StringIO()
+    with mock.patch.object(buf, "isatty", return_value=True):
+        with mock.patch.object(sys, "stdout", buf):
+            code = play_recipe(reloaded, "Yo")
+    assert code == 0
+    assert "\x1b[?25h" in buf.getvalue()  # cursor restored
+    assert "Yo" in re.sub(r"\x1b\[[0-9;?]*[A-Za-z]", "", buf.getvalue())
+
+
 def test_block_summary_covers_kinds():
     assert "decrypt" in block_summary({"kind": "tte", "effect": "decrypt", "mode": "stacked", "params": {}})
     assert "hold" in block_summary({"kind": "hold", "seconds": 1.0})
