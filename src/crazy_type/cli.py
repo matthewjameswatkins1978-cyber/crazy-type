@@ -113,8 +113,9 @@ def parse_subcommand(argv: list[str]) -> int | None:
         sub = argparse.ArgumentParser(prog="crazytype play")
         sub.add_argument("recipe", help="Recipe file (.json) to play.")
         sub.add_argument("text", nargs="?", help="Text to animate. Reads piped stdin when omitted.")
+        sub.add_argument("--plain", action="store_true", help="Print plain text, no animation.")
         sub_args = sub.parse_args(argv[1:])
-        return cmd_play(sub_args.recipe, sub_args.text)
+        return cmd_play(sub_args.recipe, sub_args.text, sub_args.plain)
     if command == "studio":
         sub = argparse.ArgumentParser(prog="crazytype studio")
         sub.add_argument("recipe", nargs="?", help="Recipe name or .json path to open (blank if omitted).")
@@ -131,8 +132,9 @@ def parse_subcommand(argv: list[str]) -> int | None:
         sub.add_argument("text", nargs="?", help="Text to perform. Reads piped stdin when omitted.")
         sub.add_argument("--recipe", dest="recipe_out", default=None, help="Write validated recipe JSON here.")
         sub.add_argument("--cast", dest="cast_out", default=None, help="Write asciicast v2 recording here.")
+        sub.add_argument("--plain", action="store_true", help="Record/print plain text, no animation.")
         sub_args = sub.parse_args(argv[1:])
-        return cmd_export(sub_args.recipe, sub_args.text, sub_args.recipe_out, sub_args.cast_out)
+        return cmd_export(sub_args.recipe, sub_args.text, sub_args.recipe_out, sub_args.cast_out, sub_args.plain)
     sub = argparse.ArgumentParser(prog=f"crazytype {command}")
     sub.add_argument("--json", action="store_true", help="Machine-readable JSON output (no ANSI codes).")
     sub_args = sub.parse_args(argv[1:])
@@ -205,7 +207,7 @@ def cmd_doctor(as_json: bool) -> int:
     return 0
 
 
-def cmd_play(recipe_source: str, arg_text: str | None) -> int:
+def cmd_play(recipe_source: str, arg_text: str | None, plain: bool = False) -> int:
     from .recipe import RecipeError, load_recipe
     from .runtime import play_recipe
 
@@ -222,7 +224,7 @@ def cmd_play(recipe_source: str, arg_text: str | None) -> int:
     if not text.strip():
         print("error: no input (empty text).", file=sys.stderr)
         return 1
-    return play_recipe(recipe, text)
+    return play_recipe(recipe, text, force_plain=plain)
 
 
 def _builtin_or_path(source: str) -> str:
@@ -252,7 +254,7 @@ def cmd_blocks(as_json: bool) -> int:
     return 0
 
 
-def cmd_export(recipe_arg: str, arg_text: str | None, recipe_out: str | None, cast_out: str | None) -> int:
+def cmd_export(recipe_arg: str, arg_text: str | None, recipe_out: str | None, cast_out: str | None, plain: bool = False) -> int:
     from .export import export_recipe
     from .recipe import RecipeError, load_recipe
 
@@ -272,7 +274,7 @@ def cmd_export(recipe_arg: str, arg_text: str | None, recipe_out: str | None, ca
     if not text.strip():
         print("error: no input (empty text).", file=sys.stderr)
         return 1
-    return export_recipe(recipe, text, recipe_out, cast_out)
+    return export_recipe(recipe, text, recipe_out, cast_out, force_plain=plain)
 
 
 def cmd_studio(recipe_arg: str | None) -> int:

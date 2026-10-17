@@ -85,6 +85,23 @@ def test_unknown_effect_suggests(monkeypatch, capsys):
     assert "decrypt" in captured.err.lower()
 
 
+def test_play_plain_prints_text(capsys):
+    code = cli.main(["play", "giant-growth", "Hi", "--plain"])
+    captured = capsys.readouterr()
+    assert code == 0
+    assert captured.out == "Hi\n"
+    assert "plain" in captured.err.lower()
+
+
+def test_export_plain_cast_records_no_animation(capsys, tmp_path):
+    cast = tmp_path / "plain.cast"
+    code = cli.main(["export", "giant-growth", "Hi", "--cast", str(cast), "--plain"])
+    assert code == 0
+    data = cast.read_text(encoding="utf-8")
+    assert "Hi" in data
+    assert "\x1b[?25l" not in data
+
+
 def test_resolve_effect_suggestion_quality():
     with pytest.raises(runner.UnknownEffectError) as exc:
         runner.resolve_effect("decript")

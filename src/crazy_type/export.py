@@ -44,6 +44,7 @@ def export_recipe(
     text: str,
     recipe_path: str | None = None,
     cast_path: str | None = None,
+    force_plain: bool = False,
 ) -> int:
     """Validate, then write the requested export artifacts. Returns exit code."""
     from .recipe import validate_recipe
@@ -73,7 +74,7 @@ def export_recipe(
         old = sys.stdout
         sys.stdout = writer  # type: ignore[assignment]
         try:
-            code = play_recipe(recipe, text, force_animate=True)
+            code = play_recipe(recipe, text, force_animate=True, force_plain=force_plain)
         finally:
             sys.stdout = old
             handle.close()
