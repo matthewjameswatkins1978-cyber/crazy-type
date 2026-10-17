@@ -1,0 +1,41 @@
+[project]
+name = "crazy-type"
+version = "0.1.0"
+description = "Crazy Type — fast, playful terminal-text animations for humans and AI agents"
+readme = "README.md"
+license = { text = "MIT" }
+authors = [
+    { name = "Matthew Watkins", email = "matthewjameswatkins1978@gmail.com" }
+]
+keywords = ["terminal", "animation", "cli", "text-effects"]
+requires-python = ">=3.11"
+dependencies = [
+    "pyfiglet>=1.0.4",
+    "terminaltexteffects>=0.15.0",
+]
+classifiers = [
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Topic :: Terminals",
+    "Topic :: Utilities",
+]
+
+[project.urls]
+Homepage = "https://github.com/matthewjameswatkins1978-cyber/crazy-type"
+Repository = "https://github.com/matthewjameswatkins1978-cyber/crazy-type"
+
+[project.scripts]
+crazytype = "crazy_type.cli:main"
+
+[dependency-groups]
+dev = ["pytest>=8"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[build-system]
+requires = ["uv_build>=0.12.23,<0.13.0"]
+build-backend = "uv_build"
