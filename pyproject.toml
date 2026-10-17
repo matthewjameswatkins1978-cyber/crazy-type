@@ -1,6 +1,6 @@
 [project]
 name = "crazy-type"
-version = "0.1.0"
+version = "0.1.1"
 description = "Crazy Type — fast, playful terminal-text animations for humans and AI agents"
 readme = "README.md"
 license = { text = "MIT" }
