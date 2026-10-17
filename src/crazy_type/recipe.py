@@ -78,7 +78,7 @@ def validate_block(index: int, block: Any) -> dict[str, Any]:
         raise RecipeError(f"block {index} ({kind}): unknown fields: {sorted(extra)}.")
     normalized: dict[str, Any] = {"kind": kind}
     for name, pspec in spec.items():
-        if name not in block:
+        if name not in block or block[name] is None:
             if pspec.get("required"):
                 raise RecipeError(f"block {index} ({kind}): missing required field {name!r}.")
             normalized[name] = pspec.get("default")

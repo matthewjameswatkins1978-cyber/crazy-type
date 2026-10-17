@@ -66,6 +66,7 @@ def build_parser() -> argparse.ArgumentParser:
             "  crazytype doctor --json\n"
             "  crazytype play giant-growth \"Hello\"\n"
             "  crazytype blocks --json\n"
+            "  crazytype studio [recipe]\n"
             "\nSet CRAZYTYPE_PLAIN=1 or pass --plain to disable animation. "
             "NO_COLOR, CI, dumb terminals and reduced-motion preferences are respected."
         ),
@@ -95,7 +96,7 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-_SUBCOMMANDS = ("effects", "doctor", "play", "blocks")
+_SUBCOMMANDS = ("effects", "doctor", "play", "blocks", "studio")
 
 
 def parse_subcommand(argv: list[str]) -> int | None:
@@ -114,7 +115,11 @@ def parse_subcommand(argv: list[str]) -> int | None:
         sub.add_argument("text", nargs="?", help="Text to animate. Reads piped stdin when omitted.")
         sub_args = sub.parse_args(argv[1:])
         return cmd_play(sub_args.recipe, sub_args.text)
-    if command == "blocks":
+    if command == "studio":
+        sub = argparse.ArgumentParser(prog="crazytype studio")
+        sub.add_argument("recipe", nargs="?", help="Recipe name or .json path to open (blank if omitted).")
+        sub_args = sub.parse_args(argv[1:])
+        return cmd_studio(sub_args.recipe)
         sub = argparse.ArgumentParser(prog="crazytype blocks")
         sub.add_argument("--json", action="store_true", help="Machine-readable block catalogue.")
         sub_args = sub.parse_args(argv[1:])
@@ -236,6 +241,25 @@ def cmd_blocks(as_json: bool) -> int:
     print("\nBundled recipes: giant-growth, living-neon, particle-reconstruction")
     print("Try: crazytype play giant-growth \"Hello\"")
     return 0
+
+
+def cmd_studio(recipe_arg: str | None) -> int:
+    from .recipe import RecipeError, load_recipe
+    from .studio import Studio, blank_recipe, run_studio
+
+    if recipe_arg:
+        try:
+            recipe = load_recipe(_builtin_or_path(recipe_arg))
+        except RecipeError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+        path = recipe_arg
+    else:
+        recipe = blank_recipe()
+        path = None
+    state = Studio(recipe)
+    state.path = path
+    return run_studio(state)
 
 
 def cmd_demo() -> int:
