@@ -68,6 +68,20 @@ def test_invalid_recipes_rejected(data):
         validate_recipe(data)
 
 
+def test_validate_block_rejects_bad_collections():
+    from crazy_type.recipe import validate_block
+    from crazy_type.recipe import RecipeError
+
+    with pytest.raises(RecipeError):
+        validate_block(0, {"kind": "tte", "effect": "decrypt", "params": {1: "x"}})
+    with pytest.raises(RecipeError):
+        validate_block(0, {"kind": "grow", "fonts": []})
+    with pytest.raises(RecipeError):
+        validate_block(0, {"kind": "grow", "fonts": [1, 2]})
+    with pytest.raises(RecipeError):
+        validate_block(0, {"kind": "tte", "effect": "decrypt", "params": ["x"]})
+
+
 def test_layers_reserved_empty_ok_nonempty_rejected():
     ok = validate_recipe(good_recipe(layers=[]))
     assert ok["layers"] == []
@@ -276,6 +290,34 @@ def test_ambient_no_color_degrades_to_hold(monkeypatch, capsys):
     out = capsys.readouterr().out
     assert out.strip() == "Neon"  # readable text, zero ANSI
     assert "\x1b" not in out
+
+
+def test_play_plain_fallback_prints_text(monkeypatch, capsys):
+    # Non-TTY recipe playback: plain text on stdout, note on stderr, exit 0.
+    import io
+    import sys
+    from unittest import mock
+
+    from crazy_type.runtime import play_recipe
+
+    buf = io.StringIO()  # StringIO.isatty() is False -> redirected
+    with mock.patch.object(sys, "stdout", buf):
+        code = play_recipe(recipe.validate_recipe(good_recipe()), "Hello")
+    assert code == 0
+    assert buf.getvalue().strip() == "Hello"
+    assert "plain text" in capsys.readouterr().err
+
+
+def test_terminal_size_failure_falls_back(monkeypatch):
+    import shutil
+
+    from crazy_type.runtime import terminal_size
+
+    def boom(fallback):
+        raise OSError("no terminal")
+
+    monkeypatch.setattr(shutil, "get_terminal_size", boom)
+    assert terminal_size() == (80, 24)
 
 
 def test_tte_inplace_reuses_region(monkeypatch, capsys):
