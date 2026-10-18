@@ -74,6 +74,14 @@ validated recipe envelope or an asciicast v2 recording (with its recorded
 terminal size) for sharing and embedding. Embed via CLI subprocess, the
 `crazy_type.runtime.play_recipe` API, or a recording — see `docs/DECISIONS.md`.
 
+## Testing
+
+`uv run pytest -q` runs the full suite (also on Ubuntu + Windows via CI).
+`uv run python tools/conpty_dogfood.py` drives the real CLI under a genuine
+Windows pseudo-terminal: true-console playback, real Ctrl+C, real Studio
+keys. It asserts mechanics (exits, cursor restoration, saved files) — visual
+quality still needs human eyes.
+
 ## Credits
 
 Crazy Type is a thin, friendly shell around excellent upstream work — it
