@@ -205,6 +205,29 @@ def test_prompt_line_ctrl_c_cancels(monkeypatch):
     assert studio_mod.prompt_line("Name: ", io.StringIO()) == ""
 
 
+def test_blocks_key_dispatch(monkeypatch, tmp_path):
+    import crazy_type.studio as sm
+    from crazy_type.studio import handle_key
+
+    st = make_state()  # [tte decrypt, hold]
+    out = io.StringIO()
+    target = tmp_path / "s-as.json"
+    answers = iter(["Hey", "Zed", "giant-growth", str(target)])
+    monkeypatch.setattr(sm, "prompt_line", lambda *a, **k: next(answers))
+    kinds = lambda: [b["kind"] for b in st.recipe["blocks"]]
+    assert handle_key(st, "d", out) is None and kinds() == ["tte", "tte", "hold"]
+    assert handle_key(st, "x", out) is None and kinds() == ["tte", "hold"]
+    assert handle_key(st, "K", out) is None and kinds() == ["hold", "tte"]
+    assert handle_key(st, "J", out) is None and kinds() == ["tte", "hold"]
+    assert handle_key(st, "u", out) is None and kinds() == ["hold", "tte"]
+    assert handle_key(st, "r", out) is None and kinds() == ["tte", "hold"]
+    assert handle_key(st, "m", out) is None and st.message == "Hey"
+    assert handle_key(st, "n", out) is None and st.recipe["name"] == "Zed"
+    assert handle_key(st, "o", out) is None and st.recipe["name"] == "giant-growth"
+    assert handle_key(st, "S", out) is None and target.exists()
+    assert handle_key(st, "p", out) == "play"
+
+
 def test_open_recipe_by_builtin_name_path_and_error(monkeypatch, tmp_path):
     import crazy_type.studio as studio_mod
 
