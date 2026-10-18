@@ -422,16 +422,36 @@ def default_block_for(kind: str, effect: str = "decrypt") -> dict[str, Any]:
 
 
 def prompt_line(prompt_text: str, out: Any) -> str:
-    """Ask for a line of text: leave the alt screen, use cooked input, return."""
-    out.write(ALT_EXIT + SHOW)
-    out.flush()
-    try:
-        return input(prompt_text)
-    except (EOFError, KeyboardInterrupt):
-        return ""
-    finally:
-        out.write(ALT_ENTER + HIDE)
+    """Ask for a line of text using the same key channel as everything else.
+
+    Reads keypresses (not fd 0), so prompts work wherever Studio navigation
+    works — including consoles where stdin reads misbehave. Draws over the
+    top row; the main loop repaints the full screen on return. Enter confirms
+    (possibly empty), Esc cancels to empty, Ctrl+C cancels to empty.
+    """
+    buf: list[str] = []
+
+    def draw() -> None:
+        out.write("\x1b[H\x1b[K" + prompt_text + "".join(buf) + "_")
         out.flush()
+
+    draw()
+    while True:
+        try:
+            key = read_key()
+        except (EOFError, KeyboardInterrupt, OSError):
+            return ""
+        if key == "enter":
+            return "".join(buf)
+        if key in ("esc", "\x03"):
+            return ""
+        if key == "backspace":
+            buf = buf[:-1]
+            draw()
+        elif len(key) == 1 and key.isprintable():
+            buf.append(key)
+            draw()
+        # Any other key (arrows, etc.) is ignored while editing text.
 
 
 def run_studio(
@@ -669,7 +689,9 @@ def open_recipe(state: Studio, out: Any) -> None:
         state.status = f"error: {exc}"
         return
     state.recipe = loaded
-    state.path = answer.strip()
+    resolved = _builtin_or_path(answer.strip())
+    # Bundled shorthands are not save destinations (see cmd_studio).
+    state.path = resolved if os.path.exists(resolved) else None
     state.selected = 0
     state.dirty = False
     state.status = f"opened {loaded['name']}"
@@ -693,7 +715,9 @@ def play_in_studio(state: Studio, out: Any) -> None:
     else:
         state.status = "preview finished - that is exactly what the CLI will play"
         if out is sys.stdout:
+            out.write("\x1b[H\x1b[KEnter to return to Studio... ")
+            out.flush()
             try:
-                input("Enter to return to Studio... ")
-            except (EOFError, KeyboardInterrupt):
+                read_key()
+            except (EOFError, KeyboardInterrupt, OSError):
                 pass

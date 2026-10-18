@@ -179,6 +179,32 @@ def test_param_hint_mentions_range_and_current():
     assert "0.1-300" in hint and "1.0" in hint
 
 
+def test_prompt_line_types_backspaces_confirms(monkeypatch):
+    import crazy_type.studio as studio_mod
+
+    keys = iter(["h", "i", "backspace", "!", "enter"])
+    monkeypatch.setattr(studio_mod, "read_key", lambda: next(keys))
+    out = io.StringIO()
+    assert studio_mod.prompt_line("Name: ", out) == "h!"
+    assert "Name: h!" in out.getvalue()
+
+
+def test_prompt_line_esc_cancels_to_empty(monkeypatch):
+    import crazy_type.studio as studio_mod
+
+    keys = iter(["x", "y", "esc"])
+    monkeypatch.setattr(studio_mod, "read_key", lambda: next(keys))
+    assert studio_mod.prompt_line("Name: ", io.StringIO()) == ""
+
+
+def test_prompt_line_ctrl_c_cancels(monkeypatch):
+    import crazy_type.studio as studio_mod
+
+    keys = iter(["a", "\x03"])
+    monkeypatch.setattr(studio_mod, "read_key", lambda: next(keys))
+    assert studio_mod.prompt_line("Name: ", io.StringIO()) == ""
+
+
 def test_remix_save_play_roundtrip(tmp_path):
     """End-to-end acceptance: remix in Studio with keys only, save, play via CLI path."""
     import re

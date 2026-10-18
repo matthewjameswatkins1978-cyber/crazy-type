@@ -290,7 +290,9 @@ def cmd_studio(recipe_arg: str | None) -> int:
         recipe = blank_recipe()
         path = None
     state = Studio(recipe)
-    state.path = path
+    # Only remember real file paths: a bundled shorthand (e.g. living-neon)
+    # is not a save destination — 's' must ask instead of writing junk to cwd.
+    state.path = path if path is not None and os.path.exists(path) else None
     return run_studio(state)
 
 
