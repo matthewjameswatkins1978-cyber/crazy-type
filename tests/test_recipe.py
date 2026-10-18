@@ -161,6 +161,30 @@ def test_ambient_settles_readable(monkeypatch, capsys):
     assert "\x1b" not in plain  # settled text is cleanly readable
 
 
+def test_grow_falls_back_when_nothing_fits(capsys):
+    from crazy_type.runtime import Pipeline
+
+    pipe = Pipeline()
+    pipe.width = 10  # narrower than even the mini FIGlet stage
+    pipe.height = 10
+    pipe.run_grow("GROW", ["mini", "standard", "big"], 0.0, "word")
+    out = capsys.readouterr().out
+    assert "GROW" in out
+    assert "\x1b" not in out  # plain print, no half-drawn art
+
+
+def test_terminal_size_clamps_minimums(monkeypatch):
+    import shutil
+    from types import SimpleNamespace
+
+    from crazy_type.runtime import terminal_size
+
+    monkeypatch.setattr(
+        shutil, "get_terminal_size", lambda fallback: SimpleNamespace(columns=5, lines=5)
+    )
+    assert terminal_size() == (20, 10)
+
+
 def test_tte_sequence_stacks(monkeypatch, capsys):
     data = {
         "format_version": 1,
