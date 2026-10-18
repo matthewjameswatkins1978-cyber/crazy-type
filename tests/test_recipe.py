@@ -106,6 +106,17 @@ def test_effect_config_rejects_bad_params():
         recipe.build_effect_config("decrypt", {"nope": 1})
     with pytest.raises(RecipeError):
         recipe.build_effect_config("no-such-fx", {})
+    with pytest.raises(RecipeError, match="invalid params"):
+        recipe.build_effect_config("decrypt", {"typing-speed": 0})
+
+
+def test_effect_config_bool_and_list_shapes():
+    cfg = recipe.build_effect_config("bubbles", {"rainbow": True})
+    assert cfg.rainbow is True
+    cfg = recipe.build_effect_config("bubbles", {"rainbow": False})
+    assert cfg.rainbow is False
+    cfg = recipe.build_effect_config("decrypt", {"ciphertext-colors": ["00ff00", "ff0000"]})
+    assert len(cfg.ciphertext_colors) == 2
 
 
 def test_block_catalogue_json_safe():
@@ -165,6 +176,26 @@ def test_ambient_settles_readable(monkeypatch, capsys):
     assert "\x1b[?25h" in out
     assert "Neon" in plain
     assert "\x1b" not in plain  # settled text is cleanly readable
+
+
+def test_grow_unknown_font_rejected():
+    from crazy_type.runtime import Pipeline
+
+    pipe = Pipeline()
+    with pytest.raises(RecipeError, match="unknown figlet font"):
+        pipe.run_grow("Hi", ["no-such-font"], 0.0, "word")
+
+
+def test_grow_clear_leaves_no_word(capsys):
+    from crazy_type.runtime import Pipeline
+
+    import re
+
+    pipe = Pipeline()
+    pipe.run_grow("GROW", ["mini"], 0.0, "clear")
+    out = capsys.readouterr().out
+    plain = re.sub(r"\x1b\[[0-9;?]*[A-Za-z]", "", out)
+    assert "GROW" not in plain.split()  # final word line wiped, art cleared
 
 
 def test_grow_falls_back_when_nothing_fits(capsys):
