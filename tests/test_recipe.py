@@ -292,6 +292,22 @@ def test_ambient_no_color_degrades_to_hold(monkeypatch, capsys):
     assert "\x1b" not in out
 
 
+def test_play_rejects_foreign_format(capsys):
+    from crazy_type.runtime import play_recipe
+
+    assert play_recipe({"format_version": 999, "blocks": []}, "Hi") == 2
+    assert "unsupported recipe format" in capsys.readouterr().err
+
+
+def test_load_rejects_array_and_unknown_top_level():
+    with pytest.raises(RecipeError, match="must be a JSON object"):
+        load_recipe("[1, 2]")
+    data = good_recipe()
+    data["bogus"] = 1
+    with pytest.raises(RecipeError, match="unknown top-level"):
+        validate_recipe(data)
+
+
 def test_play_plain_fallback_prints_text(monkeypatch, capsys):
     # Non-TTY recipe playback: plain text on stdout, note on stderr, exit 0.
     import io
