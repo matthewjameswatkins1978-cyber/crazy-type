@@ -205,6 +205,25 @@ def test_prompt_line_ctrl_c_cancels(monkeypatch):
     assert studio_mod.prompt_line("Name: ", io.StringIO()) == ""
 
 
+def test_message_rename_and_snapshot():
+    import json
+
+    st = make_state()
+    st.set_message("Hey")
+    assert st.message == "Hey"
+    st.set_message("   ")
+    assert st.message == "Hey"  # blank input keeps the old message
+    st.rename("Zed")
+    assert st.recipe["name"] == "Zed" and st.dirty is True
+    st.rename("  ")
+    assert st.recipe["name"] == "Zed"  # blank rename ignored
+    snapshot = json.loads(st.to_json())
+    assert snapshot["name"] == "Zed" and len(snapshot["blocks"]) == 2
+    # Undo restores the previous name too.
+    st.undo()
+    assert st.recipe["name"] == "t"
+
+
 def test_blocks_key_dispatch(monkeypatch, tmp_path):
     import crazy_type.studio as sm
     from crazy_type.studio import handle_key
