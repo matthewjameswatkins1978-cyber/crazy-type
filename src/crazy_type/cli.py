@@ -290,9 +290,12 @@ def cmd_studio(recipe_arg: str | None) -> int:
         recipe = blank_recipe()
         path = None
     state = Studio(recipe)
-    # Only remember real file paths: a bundled shorthand (e.g. living-neon)
-    # is not a save destination — 's' must ask instead of writing junk to cwd.
-    state.path = path if path is not None and os.path.exists(path) else None
+    # Only real user files are save destinations; bundled shorthands and
+    # package-internal paths must ask instead of writing junk or overwriting
+    # shipped data (see saveable_path).
+    from .studio import saveable_path
+
+    state.path = saveable_path(path)
     return run_studio(state)
 
 

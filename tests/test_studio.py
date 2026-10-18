@@ -205,6 +205,44 @@ def test_prompt_line_ctrl_c_cancels(monkeypatch):
     assert studio_mod.prompt_line("Name: ", io.StringIO()) == ""
 
 
+def test_open_recipe_by_builtin_name_path_and_error(monkeypatch, tmp_path):
+    import crazy_type.studio as studio_mod
+
+    st = make_state()
+    out = io.StringIO()
+    monkeypatch.setattr(studio_mod, "prompt_line", lambda *a, **k: "giant-growth")
+    studio_mod.open_recipe(st, out)
+    assert st.recipe["name"] == "giant-growth"
+    assert st.path is None  # bundled names are not save destinations
+    assert st.dirty is False
+    real = tmp_path / "mine.json"
+    real.write_text(
+        '{"format_version": 1, "name": "mine", '
+        '"blocks": [{"kind": "hold", "seconds": 1}]}',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(studio_mod, "prompt_line", lambda *a, **k: str(real))
+    studio_mod.open_recipe(st, out)
+    assert st.recipe["name"] == "mine"
+    assert st.path == str(real)  # real user files stay as save destinations
+    monkeypatch.setattr(studio_mod, "prompt_line", lambda *a, **k: "/nonexistent/xyz.json")
+    studio_mod.open_recipe(st, out)
+    assert "error" in st.status
+    assert st.recipe["name"] == "mine"  # failed open keeps current
+    monkeypatch.setattr(studio_mod, "prompt_line", lambda *a, **k: "")
+    studio_mod.open_recipe(st, out)  # blank answer: no-op
+    assert st.recipe["name"] == "mine"
+
+
+def test_play_in_studio_reports_finished():
+    from crazy_type.studio import play_in_studio
+
+    st = make_state()
+    out = io.StringIO()
+    play_in_studio(st, out)  # headless: plain fallback, no pause (out is not stdout)
+    assert "exactly what the CLI will play" in st.status
+
+
 def test_stale_param_index_clamped_no_crash():
     # Edit a 3-param block at index 2, move to a 1-param block, press enter:
     # must clamp to 'seconds', not IndexError.

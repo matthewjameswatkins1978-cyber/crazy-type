@@ -12,6 +12,7 @@ import copy
 import json
 import os
 import sys
+from pathlib import Path
 from typing import Any, Callable, Iterable
 
 from .recipe import BLOCK_SPECS, RECIPE_FORMAT_VERSION, RecipeError, validate_recipe
@@ -409,6 +410,30 @@ def _render_help(write: Callable[[str], Any], w: int) -> None:
 # --------------------------------------------------------------------------
 # Controller
 # --------------------------------------------------------------------------
+def saveable_path(candidate: str | None) -> str | None:
+    """Return candidate if it is a safe save destination, else None.
+
+    Bundled recipes resolve inside the installed package: saving over them
+    would silently mutate shipped data (lost on reinstall), so they are not
+    destinations — 's' must ask instead. Ordinary user files pass through.
+    """
+    if not candidate:
+        return None
+    try:
+        resolved = Path(candidate).resolve()
+    except OSError:
+        return None
+    if not resolved.exists():
+        return None
+    try:
+        package_dir = Path(__file__).resolve().parent
+        if resolved.is_relative_to(package_dir):
+            return None
+    except (OSError, ValueError):
+        return None
+    return candidate
+
+
 def default_block_for(kind: str, effect: str = "decrypt") -> dict[str, Any]:
     if kind == "tte":
         return validate_recipe(
@@ -693,8 +718,8 @@ def open_recipe(state: Studio, out: Any) -> None:
         return
     state.recipe = loaded
     resolved = _builtin_or_path(answer.strip())
-    # Bundled shorthands are not save destinations (see cmd_studio).
-    state.path = resolved if os.path.exists(resolved) else None
+    # Bundled/package paths are not save destinations (see saveable_path).
+    state.path = saveable_path(resolved)
     state.selected = 0
     state.dirty = False
     state.status = f"opened {loaded['name']}"
