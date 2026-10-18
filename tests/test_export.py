@@ -49,6 +49,16 @@ def test_export_unwritable_paths(capsys):
     assert "cannot write" in capsys.readouterr().err
 
 
+def test_cast_writer_flushes_handle():
+    from unittest import mock
+
+    from crazy_type.export import CastWriter
+
+    handle = mock.Mock()
+    CastWriter(handle, 80, 24).flush()
+    handle.flush.assert_called_once_with()
+
+
 def test_cast_writer_event_shape(tmp_path):
     target = tmp_path / "w.cast"
     with open(target, "w", encoding="utf-8") as handle:

@@ -95,6 +95,20 @@ def test_catalogue_declares_no_layers():
     assert block_catalogue()["layers_supported"] is False
 
 
+def test_load_unreadable_file_reports_clearly(tmp_path, monkeypatch):
+    from pathlib import Path
+
+    target = tmp_path / "locked.json"
+    target.write_text("{}", encoding="utf-8")
+
+    def boom(self, *args, **kwargs):
+        raise OSError("denied")
+
+    monkeypatch.setattr(Path, "read_text", boom)
+    with pytest.raises(RecipeError, match="cannot read"):
+        load_recipe(str(target))
+
+
 def test_load_from_json_string_and_dict():
     data = good_recipe()
     assert load_recipe(data)["name"] == "demo"
