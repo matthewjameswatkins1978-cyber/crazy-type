@@ -41,6 +41,21 @@ def _truthy(value: str | None) -> bool:
     return value is not None and value.strip().lower() in {"1", "true", "yes", "on"}
 
 
+# Glyphs the animation engine needs the console to render. Probed against
+# sys.stdout.encoding before animating (found via a real cp1252 ConPTY crash).
+GLYPH_PROBE = "\u2588\u2593\u2592\u2591<>*#"
+
+
+def console_supports_glyphs() -> tuple[bool, str]:
+    """True when the console encoding can render animation glyphs."""
+    encoding = getattr(sys.stdout, "encoding", None) or "utf-8"
+    try:
+        GLYPH_PROBE.encode(encoding)
+        return True, encoding
+    except (LookupError, UnicodeEncodeError):
+        return False, encoding
+
+
 def running_in_ci() -> bool:
     """True when any well-known CI marker environment variable is set."""
     for marker in _CI_MARKERS:
@@ -74,6 +89,12 @@ def should_animate(force_plain: bool = False) -> tuple[bool, str]:
         return False, "NO_COLOR is set"
     if reduced_motion_requested():
         return False, "reduced motion requested"
+    ok, encoding = console_supports_glyphs()
+    if not ok:
+        return False, (
+            f"console encoding {encoding} cannot render animation glyphs "
+            "(use Windows Terminal or 'chcp 65001')"
+        )
     return True, "terminal supports animation"
 
 

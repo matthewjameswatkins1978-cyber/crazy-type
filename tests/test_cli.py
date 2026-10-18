@@ -44,6 +44,27 @@ def test_non_tty_defaults_to_plain(monkeypatch, capsys):
     assert ANSI_RE.search(out) is None
 
 
+def test_cp1252_tty_falls_back_cleanly(monkeypatch, capsys):
+    # A TTY whose encoding cannot render glyphs must get plain text,
+    # not a UnicodeEncodeError traceback (seen on a default-CP ConPTY).
+    import io as _io
+
+    class Cp1252Out(_io.StringIO):
+        encoding = "cp1252"
+
+        def isatty(self):
+            return True
+
+    fake = Cp1252Out()
+    monkeypatch.setattr(sys, "stdout", fake)
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
+    code = cli.main(["hi", "--effect", "decrypt"])
+    out, err = fake.getvalue(), capsys.readouterr().err
+    assert code == 0
+    assert out.strip() == "hi"
+    assert "chcp 65001" in err
+
+
 def test_no_input_is_usage_error(monkeypatch, capsys):
     monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
     monkeypatch.setattr(sys.stdout, "isatty", lambda: False)

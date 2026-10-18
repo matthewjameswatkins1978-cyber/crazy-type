@@ -54,6 +54,32 @@ def test_force_plain_flag(monkeypatch):
     assert animate is False
 
 
+def test_glyph_probe_utf8_passes():
+    ok, _ = terms.console_supports_glyphs()
+    assert ok is True  # pytest capture is UTF-8
+
+
+def test_glyph_probe_rejects_ascii(monkeypatch):
+    class AsciiOut:
+        encoding = "ascii"
+
+        def isatty(self):
+            return True
+
+        def write(self, s):
+            return len(s)
+
+        def flush(self):
+            pass
+
+    monkeypatch.setattr(sys, "stdout", AsciiOut())
+    ok, encoding = terms.console_supports_glyphs()
+    assert ok is False
+    animate, reason = terms.should_animate()
+    assert animate is False
+    assert "chcp 65001" in reason
+
+
 def test_healthy_terminal_animates(monkeypatch):
     _tty(monkeypatch, True)
     for var in ("CI", "GITHUB_ACTIONS", "TF_BUILD", "NO_COLOR", "REDUCED_MOTION",

@@ -53,7 +53,9 @@ Exit codes: `0` success · `1` runtime error / empty input · `2` usage error ·
 
 Animation is automatically skipped (plain text printed) when output is
 redirected, running in CI, `TERM=dumb`, `NO_COLOR` is set, a reduced-motion
-preference is set, or `--plain` / `CRAZYTYPE_PLAIN=1` is used. No AI service,
+preference is set, the console encoding cannot render animation glyphs
+(Windows Terminal is UTF-8 by default; otherwise `chcp 65001`), or `--plain`
+/ `CRAZYTYPE_PLAIN=1` is used. No AI service,
 model call, server or account is ever required.
 
 Some upstream effects are long-form by design (notably `matrix`, which can
