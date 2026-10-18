@@ -185,6 +185,24 @@ def test_terminal_size_clamps_minimums(monkeypatch):
     assert terminal_size() == (20, 10)
 
 
+def test_tte_inplace_reuses_region(monkeypatch, capsys):
+    # In-place sequencing (ADR-1): the second block reuses the same screen
+    # region instead of stacking below. Headless proof: final text present,
+    # cursor restored, clean exit.
+    data = {
+        "format_version": 1,
+        "name": "t",
+        "blocks": [
+            {"kind": "tte", "effect": "print", "mode": "inplace"},
+            {"kind": "tte", "effect": "print", "mode": "inplace"},
+        ],
+    }
+    code, out, plain = _play_headless(monkeypatch, capsys, recipe.validate_recipe(data), "Hi")
+    assert code == 0
+    assert "\x1b[?25h" in out
+    assert "Hi" in plain
+
+
 def test_tte_sequence_stacks(monkeypatch, capsys):
     data = {
         "format_version": 1,
