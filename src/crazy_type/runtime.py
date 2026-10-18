@@ -125,7 +125,7 @@ class Pipeline:
 
         def show(stage: list[str]) -> None:
             for line in stage:
-                sys.stdout.write(line.ljust(clear_width) + "\n")
+                sys.stdout.write(line.ljust(clear_width) + "\r\n")
             sys.stdout.flush()
 
         def hide(nlines: int) -> None:
@@ -148,11 +148,11 @@ class Pipeline:
         if end == "clear":
             hide(len(stages[0]))
             for _ in range(len(stages[0])):
-                sys.stdout.write(" " * clear_width + "\n")
+                sys.stdout.write(" " * clear_width + "\r\n")
             hide(len(stages[0]))
         else:
             hide(len(stages[0]))
-            sys.stdout.write(text + "\n")
+            sys.stdout.write(text + "\r\n")
         sys.stdout.flush()
 
     def run_ambient(self, text: str, duration: float, fps: int, seed: int | None) -> None:
@@ -173,7 +173,7 @@ class Pipeline:
         period = 1.0 / fps
         # First paint.
         for line in lines:
-            sys.stdout.write(_paint_line(line, -band, band, None) + "\n")
+            sys.stdout.write(_paint_line(line, -band, band, None) + "\r\n")
         sys.stdout.flush()
         while time.monotonic() < deadline:
             time.sleep(period)
@@ -186,14 +186,14 @@ class Pipeline:
             sys.stdout.write(f"\x1b[{len(lines)}A")
             for i, line in enumerate(lines):
                 g = glitch if glitch is not None and frames <= glitch[3] and i == glitch[1] else None
-                sys.stdout.write(_paint_line(line, pos, band, g) + "\n")
+                sys.stdout.write(_paint_line(line, pos, band, g) + "\r\n")
             sys.stdout.flush()
             if frames == glitch_at + 8:
                 glitch_at = frames + rng.randint(40, 90)
         # Settle on clean, readable text.
         sys.stdout.write(f"\x1b[{len(lines)}A")
         for line in lines:
-            sys.stdout.write(_colored(line, BASE_COLOR) + "\n")
+            sys.stdout.write(_colored(line, BASE_COLOR) + "\r\n")
         sys.stdout.flush()
 
 

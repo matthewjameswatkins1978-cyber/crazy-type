@@ -65,3 +65,15 @@ than playing in a bounded region; bounded-region preview is a later milestone.
 from a real paced playback, stamped with its terminal size, cursor restore
 included. No standalone-binary or TTE-free export is promised: TTE effects
 need their runtime, and the recording header says so by construction.
+
+## ADR-7 (2026-10-17): Console-portable output — CRLF + ASCII chrome
+
+**Decision:** All first-party screen writes use CRLF (bare LF staggers the
+column on real VT consoles) and Studio chrome is ASCII-only, so the editor
+survives non-UTF-8 consoles (proven under a default-codepage ConPTY, where
+box-drawing crashed before the fix). Animation *content* (TTE glyphs, FIGlet)
+keeps requiring UTF-8 — documented, not disguised. Mechanical dogfooding
+(real ConPTY: playback, Ctrl+C→130, Studio keys, cursor restore) is recorded
+here; visual aesthetics still need human eyes.
+
+## ADR-7 (2026-10-17): Console-portable output — CRLF + ASCII chrome

@@ -282,14 +282,20 @@ def block_summary(block: dict[str, Any]) -> str:
 def render(state: Studio, out: Any, cols: int, rows: int) -> None:
     """Draw one full frame of the editor."""
     w = max(cols, MIN_COLS)
-    write = out.write
+
+    def write(text: str) -> None:
+        # CRLF: a bare LF only moves down, leaving the column staggered on
+        # real consoles. Carriage-return every line we own.
+        out.write(text.replace("\n", "\r\n"))
     write(CLEAR)
-    title = f" Crazy Type Studio — {state.recipe['name']}"
+    title = f" Crazy Type Studio - {state.recipe['name']}"
     if state.dirty:
         title += " *"
     write(BOLD + title[:w] + RESET + "\n")
     write(DIM + f" Message: {state.message}"[:w] + RESET + "\n")
-    write("─" * min(w, 200) + "\n")
+    # NOTE: ASCII rule below so Studio survives non-UTF-8 consoles (e.g. a
+    # default-CP ConPTY); the animation engine itself still needs UTF-8.
+    write("-" * min(w, 200) + "\n")
     if state.screen == "blocks":
         _render_blocks(state, write, w, rows)
     elif state.screen == "edit":
@@ -300,14 +306,14 @@ def render(state: Studio, out: Any, cols: int, rows: int) -> None:
         _render_effects(state, write, w, rows)
     elif state.screen == "help":
         _render_help(write, w)
-    write("─" * min(w, 200) + "\n")
+    write("-" * min(w, 200) + "\n")
     write((DIM + state.status[:w] + RESET + "\n"))
-    write(" q quit · ? help\n")
+    write(" q quit, ? help\n")
 
 
 def _render_blocks(state: Studio, write: Callable[[str], Any], w: int, rows: int) -> None:
     blocks = state.recipe["blocks"]
-    write(" Blocks — j/k move · enter edit · a add · d duplicate · x delete · J/K reorder\n")
+    write(" Blocks - j/k move, enter edit, a add, d duplicate, x delete, J/K reorder\n")
     room = max(rows - 10, 4)
     start = max(0, min(state.selected - room // 2, len(blocks) - room))
     for i in range(start, min(start + room, len(blocks))):
@@ -317,7 +323,7 @@ def _render_blocks(state: Studio, write: Callable[[str], Any], w: int, rows: int
             write(BOLD + line[:w] + RESET + "\n")
         else:
             write(line[:w] + "\n")
-    write(DIM + " p play · m message · n rename · s save · S save-as · o open · u undo · r redo"[:w] + RESET + "\n")
+    write(DIM + " p play, m message, n rename, s save, S save-as, o open, u undo, r redo"[:w] + RESET + "\n")
 
 
 def _render_edit(state: Studio, write: Callable[[str], Any], w: int, rows: int) -> None:
@@ -325,7 +331,7 @@ def _render_edit(state: Studio, write: Callable[[str], Any], w: int, rows: int) 
     spec = BLOCK_SPECS[block["kind"]]["params"]
     names = list(spec)
     state.param_index = min(state.param_index, len(names) - 1)
-    write(f" Editing block {state.selected} ({block['kind']}) — enter change · esc back\n")
+    write(f" Editing block {state.selected} ({block['kind']}) - enter change, esc back\n")
     for i, name in enumerate(names):
         marker = ">" if i == state.param_index else " "
         line = f" {marker} {name} = {block.get(name)!r}"
@@ -336,10 +342,10 @@ def _render_edit(state: Studio, write: Callable[[str], Any], w: int, rows: int) 
 def _render_add(state: Studio, write: Callable[[str], Any], w: int) -> None:
     kinds = list(BLOCK_SPECS)
     state.add_index = min(state.add_index, len(kinds) - 1)
-    write(" Add block — enter insert after current · esc back\n")
+    write(" Add block - enter insert after current, esc back\n")
     for i, kind in enumerate(kinds):
         marker = ">" if i == state.add_index else " "
-        line = f" {marker} {kind} — {BLOCK_SPECS[kind]['help']}"
+        line = f" {marker} {kind} - {BLOCK_SPECS[kind]['help']}"
         write((BOLD + line[:w] + RESET if i == state.add_index else line[:w]) + "\n")
 
 
@@ -348,7 +354,7 @@ def _render_effects(state: Studio, write: Callable[[str], Any], w: int, rows: in
 
     names = [n for n in effect_names() if state.effect_filter.lower() in n.lower()]
     state.effect_index = min(state.effect_index, max(len(names) - 1, 0))
-    write(" Pick effect — type to filter · enter select · esc back\n")
+    write(" Pick effect - type to filter, enter select, esc back\n")
     write(f" filter: {state.effect_filter}\n")
     room = max(rows - 10, 4)
     start = max(0, min(state.effect_index - room // 2, len(names) - room))
@@ -624,9 +630,9 @@ def play_in_studio(state: Studio, out: Any) -> None:
     elif code != 0:
         state.status = f"preview exited with code {code}"
     else:
-        state.status = "preview finished — that is exactly what the CLI will play"
+        state.status = "preview finished - that is exactly what the CLI will play"
         if out is sys.stdout:
             try:
-                input("Enter to return to Studio… ")
+                input("Enter to return to Studio... ")
             except (EOFError, KeyboardInterrupt):
                 pass
