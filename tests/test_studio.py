@@ -25,7 +25,8 @@ def make_state():
 
 
 def test_blank_recipe_valid():
-    assert blank_recipe()["blocks"][0]["kind"] == "hold"
+    recipe = blank_recipe()
+    assert recipe["blocks"][0]["kind"] == "tte"  # first preview must show something
 
 
 def test_add_remove_move_duplicate():

@@ -89,8 +89,14 @@ def read_key() -> str:
 # Model: validated recipe state with undo/redo
 # --------------------------------------------------------------------------
 def blank_recipe(name: str = "untitled") -> dict[str, Any]:
+    # A blank canvas must do something visible on first preview: open with a
+    # friendly effect, not a silent hold (which looks broken to newcomers).
     return validate_recipe(
-        {"format_version": RECIPE_FORMAT_VERSION, "name": name, "blocks": [{"kind": "hold", "seconds": 1.0}]}
+        {
+            "format_version": RECIPE_FORMAT_VERSION,
+            "name": name,
+            "blocks": [{"kind": "tte", "effect": "decrypt"}],
+        }
     )
 
 
