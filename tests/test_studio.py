@@ -228,6 +228,31 @@ def test_blocks_key_dispatch(monkeypatch, tmp_path):
     assert handle_key(st, "p", out) == "play"
 
 
+def test_read_key_windows_mappings(monkeypatch):
+    import sys
+
+    import crazy_type.studio as studio_mod
+
+    if sys.platform != "win32":
+        return  # Windows-only decoder; POSIX branch needs a real tty
+    import msvcrt
+
+    cases = [
+        ([b"\xe0", b"H"], "up"),
+        ([b"\xe0", b"P"], "down"),
+        ([b"\xe0", b"K"], "left"),
+        ([b"\xe0", b"M"], "right"),
+        ([b"\r"], "enter"),
+        ([b"\x1b"], "esc"),
+        ([b"\t"], "tab"),
+        ([b"j"], "j"),
+    ]
+    for presses, expected in cases:
+        it = iter(presses)
+        monkeypatch.setattr(msvcrt, "getch", lambda: next(it))
+        assert studio_mod.read_key() == expected
+
+
 def test_run_studio_refuses_small_terminal():
     st = make_state()
     assert run_studio(st, keys=["q"], out=io.StringIO(), size=(30, 10)) == 1
