@@ -228,6 +228,27 @@ def test_blocks_key_dispatch(monkeypatch, tmp_path):
     assert handle_key(st, "p", out) == "play"
 
 
+def test_effect_picker_filter_and_select():
+    from crazy_type.studio import handle_key
+
+    st = make_state()  # [tte decrypt, hold]
+    out = io.StringIO()
+    assert handle_key(st, "a", out) is None
+    assert handle_key(st, "enter", out) is None  # tte -> picker
+    assert st.screen == "effect"
+    for ch in "mat":
+        assert handle_key(st, ch, out) is None
+    assert st.effect_filter == "mat"
+    assert handle_key(st, "backspace", out) is None
+    assert st.effect_filter == "ma"
+    for ch in "trix":
+        assert handle_key(st, ch, out) is None
+    assert handle_key(st, "enter", out) is None
+    assert st.screen == "blocks"
+    added = st.recipe["blocks"][1]
+    assert added["kind"] == "tte" and added["effect"] == "matrix"
+
+
 def test_open_recipe_by_builtin_name_path_and_error(monkeypatch, tmp_path):
     import crazy_type.studio as studio_mod
 
