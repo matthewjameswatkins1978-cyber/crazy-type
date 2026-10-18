@@ -76,4 +76,17 @@ keeps requiring UTF-8 — documented, not disguised. Mechanical dogfooding
 (real ConPTY: playback, Ctrl+C→130, Studio keys, cursor restore) is recorded
 here; visual aesthetics still need human eyes.
 
-## ADR-7 (2026-10-17): Console-portable output — CRLF + ASCII chrome
+## Appendix (2026-10-18): runtime size and performance observations
+
+- Crazy Type's own code: ~185 KB source (runtime, recipes, Studio, export).
+  Zero new dependencies on the feature branch — Studio is stdlib-only, so the
+  player stays TTE + pyfiglet + stdlib.
+- Installed footprint is dominated by upstream: terminaltexteffects ~2.0 MB,
+  pyfiglet ~6.9 MB (mostly bundled FIGlet fonts). Built wheel: ~12 KB.
+- Startup: `crazytype --version` in ~0.34 s (uv overhead included),
+  `import crazy_type.cli` in ~0.17 s. No lazy-import debt.
+- Ambient (living-neon) pacing: frames cost ~8 us each to compute
+  (~131k frames/s achievable) against a 10 fps cap — continuous animation
+  sips CPU by design; one-shot CLI effects keep full 60 fps pacing.
+- Playback memory is flat: frames stream to the terminal, nothing
+  accumulates.
