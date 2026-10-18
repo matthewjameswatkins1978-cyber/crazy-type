@@ -228,6 +228,38 @@ def test_blocks_key_dispatch(monkeypatch, tmp_path):
     assert handle_key(st, "p", out) == "play"
 
 
+def test_run_studio_refuses_small_terminal():
+    st = make_state()
+    assert run_studio(st, keys=["q"], out=io.StringIO(), size=(30, 10)) == 1
+
+
+def test_run_studio_refuses_non_interactive_stdin(monkeypatch):
+    import sys
+
+    st = make_state()
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: False)
+    assert run_studio(st, out=io.StringIO(), size=(100, 30)) == 1
+
+
+def test_run_studio_keyboard_interrupt_exits_130():
+    class Boom:
+        def __iter__(self):
+            return self
+
+        def __next__(self):
+            raise KeyboardInterrupt()
+
+    st = make_state()
+    assert run_studio(st, keys=Boom(), out=io.StringIO(), size=(100, 30)) == 130
+
+
+def test_run_studio_play_key_plays_and_returns():
+    st = make_state()
+    out = io.StringIO()
+    assert run_studio(st, keys=["p", "q"], out=out, size=(100, 30)) == 0
+    assert "exactly what the CLI will play" in st.status
+
+
 def test_effect_picker_filter_and_select():
     from crazy_type.studio import handle_key
 
