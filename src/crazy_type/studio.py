@@ -64,6 +64,11 @@ def read_key() -> str:
         data = os.read(fd, 4)
     finally:
         termios.tcsetattr(fd, termios.TCSADRAIN, old)
+    return decode_posix_key(data)
+
+
+def decode_posix_key(data: bytes) -> str:
+    """Decode raw POSIX input bytes. Split out for cross-platform tests."""
     if data == b"\x1b[A":
         return "up"
     if data == b"\x1b[B":

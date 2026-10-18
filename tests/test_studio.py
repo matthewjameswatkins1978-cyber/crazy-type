@@ -228,6 +228,23 @@ def test_blocks_key_dispatch(monkeypatch, tmp_path):
     assert handle_key(st, "p", out) == "play"
 
 
+def test_decode_posix_key_maps():
+    from crazy_type.studio import decode_posix_key
+
+    assert decode_posix_key(b"\x1b[A") == "up"
+    assert decode_posix_key(b"\x1b[B") == "down"
+    assert decode_posix_key(b"\x1b[C") == "right"
+    assert decode_posix_key(b"\x1b[D") == "left"
+    assert decode_posix_key(b"\r") == "enter"
+    assert decode_posix_key(b"\n") == "enter"
+    assert decode_posix_key(b"\x1b") == "esc"
+    assert decode_posix_key(b"\t") == "tab"
+    assert decode_posix_key(b"\x7f") == "backspace"
+    assert decode_posix_key(b"\x08") == "backspace"
+    assert decode_posix_key(b"j") == "j"
+    assert decode_posix_key(b"\xff\xfe") == ""
+
+
 def test_read_key_windows_mappings(monkeypatch):
     import sys
 
