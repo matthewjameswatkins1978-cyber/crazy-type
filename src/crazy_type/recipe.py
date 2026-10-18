@@ -128,15 +128,25 @@ def validate_recipe(data: Any) -> dict[str, Any]:
     blocks = data.get("blocks")
     if not isinstance(blocks, list) or not blocks:
         raise RecipeError("recipe needs a non-empty 'blocks' list.")
-    extra = set(data) - {"format_version", "name", "description", "seed", "blocks", "capabilities"}
+    extra = set(data) - {"format_version", "name", "description", "seed", "blocks", "layers", "capabilities"}
     if extra:
         raise RecipeError(f"recipe has unknown top-level fields: {sorted(extra)}.")
+    layers = data.get("layers", [])
+    if not isinstance(layers, list):
+        raise RecipeError("'layers' must be a list.")
+    if layers:
+        raise RecipeError(
+            "recipe 'layers' are reserved for a later milestone (per-cell "
+            "compositing). Express ambient behavior with 'ambient' blocks today, "
+            "which already compose a settled base with shimmer and glitches."
+        )
     normalized: dict[str, Any] = {
         "format_version": RECIPE_FORMAT_VERSION,
         "name": name,
         "description": data.get("description", ""),
         "seed": data.get("seed"),
         "capabilities": data.get("capabilities", []),
+        "layers": [],
         "blocks": [validate_block(i, b) for i, b in enumerate(blocks)],
     }
     if normalized["seed"] is not None and not isinstance(normalized["seed"], int):
@@ -230,6 +240,7 @@ def block_catalogue() -> dict[str, Any]:
         blocks[kind] = {"help": spec["help"], "params": params}
     return {
         "recipe_format_version": RECIPE_FORMAT_VERSION,
+        "layers_supported": False,  # reserved; ambient blocks cover v1 needs
         "blocks": blocks,
         "tte_effects": [info.name for info in discover_effects()],
     }

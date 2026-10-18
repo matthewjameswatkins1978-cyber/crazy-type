@@ -62,6 +62,19 @@ def test_invalid_recipes_rejected(data):
         validate_recipe(data)
 
 
+def test_layers_reserved_empty_ok_nonempty_rejected():
+    ok = validate_recipe(good_recipe(layers=[]))
+    assert ok["layers"] == []
+    with pytest.raises(RecipeError, match="later milestone"):
+        validate_recipe(good_recipe(layers=[{"kind": "ambient"}]))
+    with pytest.raises(RecipeError):
+        validate_recipe(good_recipe(layers="nope"))
+
+
+def test_catalogue_declares_no_layers():
+    assert block_catalogue()["layers_supported"] is False
+
+
 def test_load_from_json_string_and_dict():
     data = good_recipe()
     assert load_recipe(data)["name"] == "demo"
