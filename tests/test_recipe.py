@@ -82,6 +82,50 @@ def test_validate_block_rejects_bad_collections():
         validate_block(0, {"kind": "tte", "effect": "decrypt", "params": ["x"]})
 
 
+def test_validator_never_crashes_on_arbitrary_json():
+    # Safe declarative data: any JSON shape either validates or raises
+    # RecipeError — never TypeError/KeyError/AttributeError/IndexError.
+    import random
+
+    rng = random.Random(20261018)
+
+    def junk(depth):
+        choice = rng.randrange(8 if depth < 3 else 5)
+        if choice == 0:
+            return {f"k{rng.randrange(6)}": junk(depth + 1) for _ in range(rng.randrange(4))}
+        if choice == 1:
+            return [junk(depth + 1) for _ in range(rng.randrange(4))]
+        return rng.choice(["x", "", 0, 1, -1, 2.5, True, False, None, "tte", "hold"])
+
+    for _ in range(300):
+        data = junk(0)
+        try:
+            out = validate_recipe(data)
+        except RecipeError:
+            continue
+        assert isinstance(out, dict)  # valid output is always normalized
+    # Biased half: recipe-shaped dicts with hostile fields, to reach deep paths.
+    kinds = ["tte", "hold", "ambient", "grow", "nope", None, 42]
+    for _ in range(300):
+        blocks = []
+        for _ in range(rng.randrange(3)):
+            block = {"kind": rng.choice(kinds)}
+            extra = junk(1)
+            if isinstance(extra, dict):
+                block.update(extra)
+            blocks.append(block)
+        data = {
+            "format_version": rng.choice([1, 1, 1, 2, None]),
+            "name": rng.choice(["x", "", None, 5]),
+            "blocks": blocks,
+        }
+        try:
+            out = validate_recipe(data)
+        except RecipeError:
+            continue
+        assert isinstance(out, dict)
+
+
 def test_layers_reserved_empty_ok_nonempty_rejected():
     ok = validate_recipe(good_recipe(layers=[]))
     assert ok["layers"] == []
