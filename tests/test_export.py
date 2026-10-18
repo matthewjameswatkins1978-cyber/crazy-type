@@ -41,8 +41,10 @@ def test_export_invalid_recipe_rejected(capsys):
     assert "error" in capsys.readouterr().err
 
 
-def test_export_unwritable_paths(capsys):
-    bad = r"Z:\definitely-not-a-drive\out.json"
+def test_export_unwritable_paths(capsys, tmp_path):
+    # A missing parent directory is unwritable on every platform (a bare
+    # "Z:\..." name is a legal filename on POSIX, so it proves nothing).
+    bad = str(tmp_path / "no-such-dir" / "out.json")
     recipe = load_recipe(_builtin_or_path("living-neon"))
     assert export_recipe(recipe, "Hi", bad, None) == 1
     assert export_recipe(recipe, "Hi", None, bad) == 1
