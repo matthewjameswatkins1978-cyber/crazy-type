@@ -36,6 +36,19 @@ def test_export_cast_records_paced_animation(tmp_path):
     assert any("?25h" in ev[2] for ev in events)  # cursor restore recorded
 
 
+def test_export_invalid_recipe_rejected(capsys):
+    assert export_recipe({"bogus": 1}, "Hi", "x.json", None) == 2
+    assert "error" in capsys.readouterr().err
+
+
+def test_export_unwritable_paths(capsys):
+    bad = r"Z:\definitely-not-a-drive\out.json"
+    recipe = load_recipe(_builtin_or_path("living-neon"))
+    assert export_recipe(recipe, "Hi", bad, None) == 1
+    assert export_recipe(recipe, "Hi", None, bad) == 1
+    assert "cannot write" in capsys.readouterr().err
+
+
 def test_cast_writer_event_shape(tmp_path):
     target = tmp_path / "w.cast"
     with open(target, "w", encoding="utf-8") as handle:
