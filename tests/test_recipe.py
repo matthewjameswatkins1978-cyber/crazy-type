@@ -55,6 +55,12 @@ def test_all_block_kinds_validate():
         {"format_version": 1, "name": "x", "blocks": [{"kind": "ambient", "duration_seconds": 0.5}]},
         {"format_version": 1, "name": "x", "blocks": [{"kind": "grow", "fonts": []}]},
         {"format_version": 1, "name": "x", "blocks": [{"kind": "grow", "end": "sideways"}]},
+        {"format_version": 1, "name": "x", "blocks": "hold"},
+        {"format_version": 1, "name": "x", "blocks": ["hold"]},
+        {"format_version": 1, "name": "x", "seed": "seven", "blocks": [{"kind": "hold", "seconds": 1}]},
+        {"format_version": 1, "name": "x", "description": 42, "blocks": [{"kind": "hold", "seconds": 1}]},
+        {"format_version": 1, "name": "x", "capabilities": "color", "blocks": [{"kind": "hold", "seconds": 1}]},
+        {"format_version": 1, "name": "x", "blocks": [{"kind": "hold", "seconds": True}]},
     ],
 )
 def test_invalid_recipes_rejected(data):
@@ -183,6 +189,40 @@ def test_terminal_size_clamps_minimums(monkeypatch):
         shutil, "get_terminal_size", lambda fallback: SimpleNamespace(columns=5, lines=5)
     )
     assert terminal_size() == (20, 10)
+
+
+def test_play_interrupt_restores_cursor(monkeypatch, capsys):
+    # Ctrl+C mid-recipe must exit 130 with the cursor shown again.
+    from crazy_type import terms
+    from crazy_type.runtime import Pipeline, play_recipe
+
+    monkeypatch.setattr(terms, "should_animate", lambda force_plain=False: (True, "test"))
+    monkeypatch.setattr(Pipeline, "run_hold", lambda self, s: (_ for _ in ()).throw(KeyboardInterrupt()))
+    data = recipe.validate_recipe(good_recipe())
+    assert play_recipe(data, "Hi") == 130
+    assert "\x1b[?25h" in capsys.readouterr().out
+
+
+def test_play_rejects_unknown_kind_defensively(monkeypatch, capsys):
+    from crazy_type import terms
+    from crazy_type.runtime import play_recipe
+
+    monkeypatch.setattr(terms, "should_animate", lambda force_plain=False: (True, "test"))
+    data = recipe.validate_recipe(good_recipe())
+    data["blocks"].append({"kind": "teleport"})  # bypassed validation: must still fail safe
+    with pytest.raises(RecipeError):
+        play_recipe(data, "Hi")
+
+
+def test_pipeline_pace_smoke():
+    from crazy_type.runtime import Pipeline
+
+    pipe = Pipeline(fps_cap=0)
+    pipe.pace()  # disabled cap: instant no-op
+    pipe = Pipeline(fps_cap=60)
+    pipe.pace()
+    pipe.pace()  # paced: no crash, timestamp advances
+    assert pipe._last_frame > 0
 
 
 def test_tte_inplace_reuses_region(monkeypatch, capsys):
