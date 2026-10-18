@@ -116,6 +116,8 @@ class Studio:
         self.effect_filter = ""
         self.effect_index = 0
         self.param_index = 0
+        self.effect_target = "add"  # or "edit": what the effect picker confirms into
+        self.quit_armed = False  # q once arms a discard-quit, q again confirms
 
     # -- history ---------------------------------------------------------
     def _commit(self, next_recipe: dict[str, Any], action: str) -> None:
@@ -232,6 +234,21 @@ class Studio:
         self.path = path
         self.dirty = False
         self.status = f"saved to {path}"
+
+
+def param_hint(spec: dict[str, Any], current: Any) -> str:
+    """One-line editing hint: type, range/options, default, current value."""
+    t = spec["type"]
+    kind = (
+        "number" if t == (int, float) else "integer" if t is int
+        else "JSON object" if t is dict else "comma list" if t is list else "text"
+    )
+    bits = [kind]
+    if "range" in spec:
+        bits.append(f"{spec['range'][0]}-{spec['range'][1]}")
+    if spec.get("values") is not None:
+        bits.append("/".join(spec["values"]))
+    return f"[{', '.join(bits)}, now {current!r}]"
 
 
 def _parse_param(spec: dict[str, Any], raw: str) -> Any:
@@ -373,7 +390,10 @@ def _render_help(write: Callable[[str], Any], w: int) -> None:
         " J / K          reorder block          u / r        undo / redo",
         " p              play recipe            m / n        message / rename",
         " s / S          save / save-as         o            open recipe",
-        " ?              this help              q / esc      back / quit",
+        " q              back (quit on blocks)  esc          back",
+        " ?              this help",
+        "",
+        " Quitting with unsaved work: q arms it, q again discards, s saves first."
         "",
         " Playback is the same runtime the CLI uses: what you see is what plays.",
     ]:
@@ -458,11 +478,6 @@ def run_studio(
             key = next_key()
             result = handle_key(state, key, out)
             if result == "quit":
-                if state.dirty and source is None:
-                    answer = prompt_line("Unsaved changes! Quit anyway? [y/N] ", out)
-                    if answer.strip().lower() not in ("y", "yes"):
-                        state.status = "kept editing"
-                        continue
                 return 0
             if result == "play":
                 play_in_studio(state, out)
@@ -477,15 +492,25 @@ def run_studio(
 
 
 def handle_key(state: Studio, key: str, out: Any) -> str | None:
-    """One keypress. Returns 'quit', 'play', or None."""
-    if key == "q" and state.screen in ("blocks", "help"):
-        return "quit"
+    """One keypress. Returns 'quit', 'play', or None.
+
+    Navigation rule: q and esc always back out of sub-screens. Only q on the
+    main blocks screen quits (possibly arming a discard confirm). No key is
+    ever silently dead: unknown keys report themselves on the status line.
+    """
     if key == "?":
         state.screen = "help" if state.screen != "help" else "blocks"
         return None
-    if key == "esc":
-        state.screen = "blocks"
-        state.effect_filter = ""
+    if key in ("q", "esc"):
+        if state.screen != "blocks":
+            state.screen = "blocks"
+            state.effect_filter = ""
+            state.status = "back to blocks"
+            return None
+        if key == "q":
+            return _quit_key(state)
+        state.quit_armed = False
+        state.status = "kept editing"
         return None
     if state.screen == "help":
         state.screen = "blocks"
@@ -498,11 +523,26 @@ def handle_key(state: Studio, key: str, out: Any) -> str | None:
         return _add_key(state, key, out)
     if state.screen == "effect":
         return _effect_key(state, key, out)
+    state.status = f"key {key!r} does nothing here (q backs out)"
+    return None
+
+
+def _quit_key(state: Studio) -> str | None:
+    """q on the blocks screen: quit clean, or arm a discard confirm."""
+    if not state.dirty:
+        return "quit"
+    if state.quit_armed:
+        return "quit"
+    state.quit_armed = True
+    state.status = "UNSAVED! q=quit+discard  s=save  esc=keep editing"
     return None
 
 
 def _blocks_key(state: Studio, key: str, out: Any) -> str | None:
     n = len(state.recipe["blocks"])
+    if key not in ("q", "s") and state.quit_armed:
+        state.quit_armed = False
+        state.status = "kept editing"
     if key in ("j", "down"):
         state.selected = min(state.selected + 1, n - 1)
     elif key in ("k", "up"):
@@ -533,8 +573,10 @@ def _blocks_key(state: Studio, key: str, out: Any) -> str | None:
         state.rename(prompt_line("Recipe name: ", out))
     elif key == "s":
         state.save(state.path or prompt_line("Save to: ", out) or "")
+        state.quit_armed = False
     elif key == "S":
         state.save(prompt_line("Save as: ", out))
+        state.quit_armed = False
     elif key == "o":
         open_recipe(state, out)
     return None
@@ -549,8 +591,15 @@ def _edit_key(state: Studio, key: str, out: Any) -> str | None:
         state.param_index = max(state.param_index - 1, 0)
     elif key == "enter":
         name = names[state.param_index]
-        current = block.get(name)
-        state.set_param(name, prompt_line(f"{name} [{current!r}]: ", out))
+        if block["kind"] == "tte" and name == "effect":
+            state.screen = "effect"
+            state.effect_target = "edit"
+            state.effect_index = 0
+            state.effect_filter = ""
+        else:
+            current = block.get(name)
+            hint = param_hint(BLOCK_SPECS[block["kind"]]["params"][name], current)
+            state.set_param(name, prompt_line(f"{name} {hint}: ", out))
     return None
 
 
@@ -564,6 +613,7 @@ def _add_key(state: Studio, key: str, out: Any) -> str | None:
         kind = kinds[state.add_index]
         if kind == "tte":
             state.screen = "effect"
+            state.effect_target = "add"
             state.effect_index = 0
             state.effect_filter = ""
         else:
@@ -578,9 +628,14 @@ def _effect_key(state: Studio, key: str, out: Any) -> str | None:
     names = [n for n in effect_names() if state.effect_filter.lower() in n.lower()]
     if key == "enter" and names:
         state.effect_index = min(state.effect_index, len(names) - 1)
-        state.add_block(default_block_for("tte", names[state.effect_index]))
+        chosen = names[state.effect_index]
+        if state.effect_target == "edit":
+            state.set_param("effect", chosen)
+        else:
+            state.add_block(default_block_for("tte", chosen))
         state.screen = "blocks"
         state.effect_filter = ""
+        state.effect_target = "add"
     elif key in ("j", "down"):
         state.effect_index = min(state.effect_index + 1, max(len(names) - 1, 0))
     elif key in ("k", "up"):

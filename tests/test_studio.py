@@ -117,6 +117,67 @@ def test_render_never_leaks_raw_text():
     assert "Crazy Type Studio" in out.getvalue()
 
 
+def test_q_backs_out_of_subscreens():
+    from crazy_type.studio import handle_key
+
+    st = make_state()
+    out = io.StringIO()
+    for screen in ("edit", "add", "effect", "help"):
+        st.screen = screen
+        assert handle_key(st, "q", out) is None  # backs out, never quits
+        assert st.screen == "blocks"
+    st.screen = "blocks"
+    assert handle_key(st, "q", out) == "quit"  # clean state quits at once
+
+
+def test_dirty_quit_arms_then_confirms():
+    from crazy_type.studio import handle_key
+
+    st = make_state()
+    out = io.StringIO()
+    st.remove_selected()  # dirty now
+    assert handle_key(st, "q", out) is None  # arms, does not quit
+    assert "UNSAVED" in st.status
+    assert handle_key(st, "q", out) == "quit"  # second q discards + quits
+
+
+def test_dirty_quit_disarms():
+    from crazy_type.studio import handle_key
+
+    st = make_state()
+    out = io.StringIO()
+    st.remove_selected()
+    assert handle_key(st, "q", out) is None
+    assert handle_key(st, "esc", out) is None
+    assert st.quit_armed is False
+    assert handle_key(st, "q", out) is None  # arms again
+    assert handle_key(st, "j", out) is None  # any other key disarms
+    assert st.quit_armed is False
+
+
+def test_effect_picker_retargets_existing_block():
+    from crazy_type.studio import handle_key
+
+    st = make_state()  # block 0 = tte decrypt
+    out = io.StringIO()
+    assert handle_key(st, "enter", out) is None  # blocks -> edit
+    # Move to the 'effect' param and confirm -> effect picker in edit mode.
+    assert handle_key(st, "enter", out) is None
+    assert st.screen == "effect"
+    assert st.effect_target == "edit"
+    st.effect_filter = "matrix"
+    assert handle_key(st, "enter", out) is None
+    assert st.screen == "blocks"
+    assert st.recipe["blocks"][0]["effect"] == "matrix"
+
+
+def test_param_hint_mentions_range_and_current():
+    from crazy_type.studio import param_hint
+
+    hint = param_hint({"type": (int, float), "range": (0.1, 300.0)}, 1.0)
+    assert "0.1-300" in hint and "1.0" in hint
+
+
 def test_remix_save_play_roundtrip(tmp_path):
     """End-to-end acceptance: remix in Studio with keys only, save, play via CLI path."""
     import re
