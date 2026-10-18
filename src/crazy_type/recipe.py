@@ -163,16 +163,21 @@ def load_recipe(source: str | Path | dict) -> dict[str, Any]:
     if isinstance(source, dict):
         return validate_recipe(source)
     text: str
-    path = Path(source) if not str(source).strip().startswith("{") else None
-    if path is not None:
-        if not path.exists():
-            raise RecipeError(f"recipe file not found: {source}")
+    candidate = Path(str(source))
+    if candidate.exists() and candidate.is_file():
         try:
-            text = path.read_text(encoding="utf-8")
+            text = candidate.read_text(encoding="utf-8")
         except OSError as exc:
             raise RecipeError(f"cannot read recipe file {source}: {exc}") from None
     else:
-        text = str(source)
+        # Otherwise the source must be JSON text (arrays included) — a missing
+        # path that is not JSON either gets a combined, honest error.
+        try:
+            return validate_recipe(json.loads(str(source)))
+        except json.JSONDecodeError:
+            raise RecipeError(
+                f"recipe file not found: {source} (and it is not valid JSON either)"
+            ) from None
     try:
         data = json.loads(text)
     except json.JSONDecodeError as exc:
