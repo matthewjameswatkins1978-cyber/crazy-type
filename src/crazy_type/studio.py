@@ -611,6 +611,9 @@ def _blocks_key(state: Studio, key: str, out: Any) -> str | None:
 def _edit_key(state: Studio, key: str, out: Any) -> str | None:
     block = state.recipe["blocks"][state.selected]
     names = list(BLOCK_SPECS[block["kind"]]["params"])
+    # param_index can go stale when moving between blocks with different
+    # parameter counts (display clamps, so the handler must too).
+    state.param_index = min(state.param_index, len(names) - 1)
     if key in ("j", "down"):
         state.param_index = min(state.param_index + 1, len(names) - 1)
     elif key in ("k", "up"):

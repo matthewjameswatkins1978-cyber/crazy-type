@@ -205,6 +205,27 @@ def test_prompt_line_ctrl_c_cancels(monkeypatch):
     assert studio_mod.prompt_line("Name: ", io.StringIO()) == ""
 
 
+def test_stale_param_index_clamped_no_crash():
+    # Edit a 3-param block at index 2, move to a 1-param block, press enter:
+    # must clamp to 'seconds', not IndexError.
+    import crazy_type.studio as studio_mod
+
+    from crazy_type.studio import handle_key
+
+    st = make_state()  # [tte decrypt, hold]
+    out = io.StringIO()
+    st.selected = 1  # hold block: only 'seconds'
+    st.screen = "edit"
+    st.param_index = 2  # stale: left over from the tte block
+    orig = studio_mod.prompt_line
+    studio_mod.prompt_line = lambda *a, **k: "3.5"
+    try:
+        assert handle_key(st, "enter", out) is None
+    finally:
+        studio_mod.prompt_line = orig
+    assert st.recipe["blocks"][1]["seconds"] == 3.5
+
+
 def test_remix_save_play_roundtrip(tmp_path):
     """End-to-end acceptance: remix in Studio with keys only, save, play via CLI path."""
     import re
