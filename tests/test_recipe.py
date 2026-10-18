@@ -256,6 +256,28 @@ def test_pipeline_pace_smoke():
     assert pipe._last_frame > 0
 
 
+def test_ambient_glitch_actually_renders(capsys):
+    # Headline living-neon feature: at 30fps/3s the seeded glitch (frames
+    # 30-70) must fire at least once. Proves corruption + recovery visibly.
+    from crazy_type.runtime import GLITCH_COLOR, Pipeline
+
+    pipe = Pipeline()
+    pipe.run_ambient("Neon nights", 3.0, 30, seed=11)
+    out = capsys.readouterr().out
+    r, g, b = GLITCH_COLOR
+    assert f"38;2;{r};{g};{b}" in out
+
+
+def test_ambient_no_color_degrades_to_hold(monkeypatch, capsys):
+    from crazy_type.runtime import Pipeline
+
+    monkeypatch.setenv("NO_COLOR", "1")
+    Pipeline().run_ambient("Neon", 0.2, 10, seed=None)
+    out = capsys.readouterr().out
+    assert out.strip() == "Neon"  # readable text, zero ANSI
+    assert "\x1b" not in out
+
+
 def test_tte_inplace_reuses_region(monkeypatch, capsys):
     # In-place sequencing (ADR-1): the second block reuses the same screen
     # region instead of stacking below. Headless proof: final text present,

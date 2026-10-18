@@ -281,6 +281,26 @@ def test_effect_picker_filter_and_select():
     assert added["kind"] == "tte" and added["effect"] == "matrix"
 
 
+def test_parse_param_shapes():
+    from crazy_type.recipe import RecipeError
+    from crazy_type.studio import _parse_param
+
+    assert _parse_param({"type": dict}, '{"a": 1}') == {"a": 1}
+    with pytest.raises(RecipeError):
+        _parse_param({"type": dict}, "{oops")
+    with pytest.raises(RecipeError):
+        _parse_param({"type": dict}, "[1, 2]")
+    assert _parse_param({"type": list}, "mini, standard") == ["mini", "standard"]
+    assert _parse_param({"type": int}, "5") == 5
+    with pytest.raises(RecipeError):
+        _parse_param({"type": int}, "x")
+    assert _parse_param({"type": (int, float)}, "2.5") == 2.5
+    assert _parse_param({"type": (int, float)}, "3") == 3
+    assert _parse_param({"type": (int, float), "required": False, "default": 1.0}, "") == 1.0
+    with pytest.raises(RecipeError):
+        _parse_param({"type": (int, float)}, "x")
+
+
 def test_open_recipe_by_builtin_name_path_and_error(monkeypatch, tmp_path):
     import crazy_type.studio as studio_mod
 
