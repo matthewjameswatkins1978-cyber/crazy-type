@@ -247,6 +247,64 @@ def test_blocks_key_dispatch(monkeypatch, tmp_path):
     assert handle_key(st, "p", out) == "play"
 
 
+def test_screen_hints_footer_on_every_screen():
+    from crazy_type.studio import _SCREEN_HINTS
+
+    st = make_state()
+    out = io.StringIO()
+    for screen in ("blocks", "edit", "add", "effect", "help"):
+        st.screen = screen
+        out.seek(0)
+        out.truncate()
+        render(st, out, 100, 30)
+        text = out.getvalue()
+        assert "?/F1 help" in text  # consistent footer everywhere
+        hint = _SCREEN_HINTS[screen]
+        assert hint.split()[0] in text  # this screen's first hint present
+
+
+def test_blocks_screen_shows_live_block_detail():
+    st = make_state()  # selected block = tte decrypt
+    out = io.StringIO()
+    render(st, out, 100, 30)
+    text = out.getvalue()
+    assert "TerminalTextEffects" in text or "effect" in text  # kind help
+    assert "decrypt" in text  # detail names the actual effect
+
+
+def test_f1_toggles_help():
+    from crazy_type.studio import handle_key
+
+    st = make_state()
+    out = io.StringIO()
+    assert handle_key(st, "f1", out) is None and st.screen == "help"
+    assert handle_key(st, "f1", out) is None and st.screen == "blocks"
+
+
+def test_run_studio_auto_preview_invokes_runtime(monkeypatch):
+    calls = []
+    import crazy_type.runtime as rt
+
+    monkeypatch.setattr(rt, "play_recipe", lambda r, t: calls.append((r["name"], t)) or 0)
+    st = make_state()
+    st.message = "Yo"
+    out = io.StringIO()
+    code = run_studio(st, keys=["q"], out=out, size=(100, 30), auto_preview=True)
+    assert code == 0
+    assert calls == [("t", "Yo")]
+
+
+def test_studio_demo_routing(monkeypatch, capsys):
+    # --demo reaches cmd_studio; refuses cleanly when non-interactive.
+    import sys
+
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: False)
+    monkeypatch.setattr(sys.stdout, "isatty", lambda: False)
+    from crazy_type import cli
+
+    assert cli.main(["studio", "--demo"]) == 1
+
+
 def test_decode_posix_key_maps():
     from crazy_type.studio import decode_posix_key
 

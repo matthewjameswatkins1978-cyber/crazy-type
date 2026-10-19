@@ -118,8 +118,13 @@ def parse_subcommand(argv: list[str]) -> int | None:
     if command == "studio":
         sub = argparse.ArgumentParser(prog="crazytype studio")
         sub.add_argument("recipe", nargs="?", help="Recipe name or .json path to open (blank if omitted).")
+        sub.add_argument(
+            "--demo",
+            action="store_true",
+            help="Play the recipe once, then open the editor ready to remix it.",
+        )
         sub_args = sub.parse_args(argv[1:])
-        return cmd_studio(sub_args.recipe)
+        return cmd_studio(sub_args.recipe, demo=sub_args.demo)
     if command == "blocks":
         sub = argparse.ArgumentParser(prog="crazytype blocks")
         sub.add_argument("--json", action="store_true", help="Machine-readable block catalogue.")
@@ -275,7 +280,7 @@ def cmd_export(recipe_arg: str, arg_text: str | None, recipe_out: str | None, ca
     return export_recipe(recipe, text, recipe_out, cast_out)
 
 
-def cmd_studio(recipe_arg: str | None) -> int:
+def cmd_studio(recipe_arg: str | None, demo: bool = False) -> int:
     from .recipe import RecipeError, load_recipe
     from .studio import Studio, blank_recipe, run_studio
 
@@ -296,7 +301,7 @@ def cmd_studio(recipe_arg: str | None) -> int:
     from .studio import saveable_path
 
     state.path = saveable_path(path)
-    return run_studio(state)
+    return run_studio(state, auto_preview=demo)
 
 
 def cmd_demo() -> int:

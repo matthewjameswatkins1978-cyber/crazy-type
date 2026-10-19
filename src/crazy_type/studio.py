@@ -41,7 +41,10 @@ def read_key() -> str:
         first = msvcrt.getch()
         if first in (b"\x00", b"\xe0"):
             second = msvcrt.getch()
-            return {b"H": "up", b"P": "down", b"K": "left", b"M": "right"}.get(second, "")
+            return {
+                b"H": "up", b"P": "down", b"K": "left", b"M": "right",
+                b";": "f1",  # F1 scan code arrives with the 0x00 prefix
+            }.get(second, "")
         if first == b"\r":
             return "enter"
         if first == b"\x1b":
@@ -81,6 +84,8 @@ def decode_posix_key(data: bytes) -> str:
         return "enter"
     if data == b"\x1b":
         return "esc"
+    if data in (b"\x1bOP", b"\x1b[11~"):
+        return "f1"
     if data == b"\t":
         return "tab"
     if data in (b"\x7f", b"\x08"):
@@ -308,6 +313,29 @@ def block_summary(block: dict[str, Any]) -> str:
     return kind
 
 
+_SCREEN_HINTS = {
+    "blocks": "j/k move  enter edit  a add  d dup  x del  J/K order  p play  "
+              "s save  S save-as  o open  u undo  r redo  m message  n rename",
+    "edit": "j/k param  enter change value  esc/q back",
+    "add": "j/k choose  enter insert after selection  esc/q back",
+    "effect": "type to filter  j/k choose  enter select  esc/q back",
+    "help": "any key returns",
+}
+
+
+def block_detail(block: dict[str, Any]) -> str:
+    """One-line description of the selected block, for live navigation."""
+    kind = block["kind"]
+    detail = BLOCK_SPECS[kind]["help"]
+    if kind == "tte":
+        from .catalog import get_effect_info
+
+        info = get_effect_info(str(block.get("effect", "")))
+        if info is not None and info.help:
+            detail += f" | {info.help}"
+    return detail
+
+
 def render(state: Studio, out: Any, cols: int, rows: int) -> None:
     """Draw one full frame of the editor."""
     w = max(cols, MIN_COLS)
@@ -336,14 +364,15 @@ def render(state: Studio, out: Any, cols: int, rows: int) -> None:
     elif state.screen == "help":
         _render_help(write, w)
     write("-" * min(w, 200) + "\n")
+    write(DIM + _SCREEN_HINTS.get(state.screen, "")[:w] + RESET + "\n")
     write((DIM + state.status[:w] + RESET + "\n"))
-    write(" q quit, ? help\n")
+    write(" ?/F1 help, q back/quit\n")
 
 
 def _render_blocks(state: Studio, write: Callable[[str], Any], w: int, rows: int) -> None:
     blocks = state.recipe["blocks"]
-    write(" Blocks - j/k move, enter edit, a add, d duplicate, x delete, J/K reorder\n")
-    room = max(rows - 10, 4)
+    write(" Blocks\n")
+    room = max(rows - 11, 4)
     start = max(0, min(state.selected - room // 2, len(blocks) - room))
     for i in range(start, min(start + room, len(blocks))):
         marker = ">" if i == state.selected else " "
@@ -352,7 +381,8 @@ def _render_blocks(state: Studio, write: Callable[[str], Any], w: int, rows: int
             write(BOLD + line[:w] + RESET + "\n")
         else:
             write(line[:w] + "\n")
-    write(DIM + " p play, m message, n rename, s save, S save-as, o open, u undo, r redo"[:w] + RESET + "\n")
+    # Live description of whatever the cursor is on (step 9).
+    write(DIM + f"   {block_detail(blocks[state.selected])}"[:w] + RESET + "\n")
 
 
 def _render_edit(state: Studio, write: Callable[[str], Any], w: int, rows: int) -> None:
@@ -360,7 +390,7 @@ def _render_edit(state: Studio, write: Callable[[str], Any], w: int, rows: int) 
     spec = BLOCK_SPECS[block["kind"]]["params"]
     names = list(spec)
     state.param_index = min(state.param_index, len(names) - 1)
-    write(f" Editing block {state.selected} ({block['kind']}) - enter change, esc back\n")
+    write(f" Editing block {state.selected} ({block['kind']})\n")
     for i, name in enumerate(names):
         marker = ">" if i == state.param_index else " "
         line = f" {marker} {name} = {block.get(name)!r}"
@@ -371,7 +401,7 @@ def _render_edit(state: Studio, write: Callable[[str], Any], w: int, rows: int) 
 def _render_add(state: Studio, write: Callable[[str], Any], w: int) -> None:
     kinds = list(BLOCK_SPECS)
     state.add_index = min(state.add_index, len(kinds) - 1)
-    write(" Add block - enter insert after current, esc back\n")
+    write(" Add block\n")
     for i, kind in enumerate(kinds):
         marker = ">" if i == state.add_index else " "
         line = f" {marker} {kind} - {BLOCK_SPECS[kind]['help']}"
@@ -383,7 +413,7 @@ def _render_effects(state: Studio, write: Callable[[str], Any], w: int, rows: in
 
     names = [n for n in effect_names() if state.effect_filter.lower() in n.lower()]
     state.effect_index = min(state.effect_index, max(len(names) - 1, 0))
-    write(" Pick effect - type to filter, enter select, esc back\n")
+    write(" Pick effect\n")
     write(f" filter: {state.effect_filter}\n")
     room = max(rows - 10, 4)
     start = max(0, min(state.effect_index - room // 2, len(names) - room))
@@ -403,7 +433,7 @@ def _render_help(write: Callable[[str], Any], w: int) -> None:
         " p              play recipe            m / n        message / rename",
         " s / S          save / save-as         o            open recipe",
         " q              back (quit on blocks)  esc          back",
-        " ?              this help",
+        " ? / F1        this help (F1 works everywhere)",
         "",
         " Quitting with unsaved work: q arms it, q again discards, s saves first."
         "",
@@ -489,10 +519,12 @@ def run_studio(
     keys: Iterable[str] | None = None,
     out: Any = None,
     size: tuple[int, int] | None = None,
+    auto_preview: bool = False,
 ) -> int:
     """Main loop. Waterloo: every exit restores the terminal.
 
     keys/out/size are injectable so tests can drive the editor headlessly.
+    auto_preview plays the recipe once (step 10) before editing starts.
     """
     import shutil
 
@@ -524,6 +556,18 @@ def run_studio(
         print("error: Studio needs an interactive terminal.", file=sys.stderr)
         return 1
 
+    if auto_preview:
+        from .runtime import play_recipe
+
+        play_recipe(state.recipe, state.message)
+        if source is None:  # interactive: pause so the preview is readable
+            out.write("Enter to open Studio... ")
+            out.flush()
+            try:
+                read_key()
+            except (EOFError, KeyboardInterrupt, OSError):
+                pass
+
     out.write(ALT_ENTER + HIDE)
     out.flush()
     try:
@@ -554,7 +598,7 @@ def handle_key(state: Studio, key: str, out: Any) -> str | None:
     main blocks screen quits (possibly arming a discard confirm). No key is
     ever silently dead: unknown keys report themselves on the status line.
     """
-    if key == "?":
+    if key in ("?", "f1"):
         state.screen = "help" if state.screen != "help" else "blocks"
         return None
     if key in ("q", "esc"):
