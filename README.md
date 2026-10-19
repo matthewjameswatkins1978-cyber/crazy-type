@@ -45,6 +45,7 @@ uv run crazytype "Hello world"
 | `crazytype doctor [--json]` | Environment diagnostics |
 | `crazytype --version` | Version |
 | `crazytype studio [recipe]` | Keyboard-first visual editor: remix blocks, preview, save |
+| `crazytype studio --demo [recipe]` | Play the recipe once, then open the editor ready to remix |
 | `crazytype play <recipe> [text]` | Play a recipe file (bundled names work too) |
 | `crazytype blocks [--json]` | Recipe block catalogue for humans and AI agents |
 | `crazytype export <recipe> [text] --recipe/--cast` | Export validated recipe / asciicast recording |
@@ -73,6 +74,19 @@ exact runtime the CLI uses, `s` to save). `crazytype export` writes a
 validated recipe envelope or an asciicast v2 recording (with its recorded
 terminal size) for sharing and embedding. Embed via CLI subprocess, the
 `crazy_type.runtime.play_recipe` API, or a recording — see `docs/DECISIONS.md`.
+
+## Watch it work
+
+[`docs/demo/studio-remix.cast`](docs/demo/studio-remix.cast) is a real
+10-second Studio session recorded from the actual renderer: open a recipe,
+move, duplicate a block (remix), preview it with real animation, undo, and
+quit through the unsaved-work guard. Replay it with any asciicast player:
+
+```sh
+npx asciinema play docs/demo/studio-remix.cast
+```
+
+Regenerate it deterministically with `uv run python tools/record_demo.py`.
 
 ## Testing
 

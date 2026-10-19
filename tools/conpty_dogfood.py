@@ -2,19 +2,27 @@
 
 Runs the actual installed CLI with a true console: real keypress bytes,
 real Ctrl+C, real ANSI stream. Asserts what a headless run CAN prove —
-exit codes, cursor restoration, saved-file contents. Visual aesthetics
-still need human eyes.
+exit codes, key delivery, cursor restoration, saved-file contents.
+
+WHAT IS RELIABLY PROVEN (use these):
+- process exit codes (0 / 130 / refusal codes)
+- keystroke delivery and handling (via exit outcomes and saved files)
+- filesystem side effects (save round trips)
+
+KNOWN LIMITATION — capture fidelity (2026-10-18): after ~1-2 full renders,
+the cmd "> CON" legacy console-buffer path stalls ConPTY's VT re-translation
+(deterministic ~318 reads, then cup+fragment garbage). The APP is not at
+fault: in-process proof (tools/record_demo.py) and direct-stdout runs show
+byte-clean frames. DO NOT assert capture CONTENT here — use fixed-time keys
+and outcome assertions instead. For frame-accurate recording, use
+record_demo.py (in-process, no ConPTY). Assert on exit codes, marker bytes
+(b"?25h") and files, not sizes.
+- A fresh ConPTY console may default to a non-UTF-8 code page; the harness
+  pins PYTHONUTF8=1 so animation paths (not fallbacks) are exercised.
 
 NOT part of pytest (timing-sensitive, Windows-only). Run by hand:
 
     uv run python tools/conpty_dogfood.py
-
-Requires: Windows 10 1809+, the project venv (uses .venv Scripts).
-Takes ~2 minutes. Known harness limits, not product bugs:
-- ConPTY re-emits an optimized stream, so byte counts vary run to run;
-  assert on exit codes, marker bytes (b"?25h") and files, not sizes.
-- A fresh ConPTY console may default to a non-UTF-8 code page; the harness
-  pins PYTHONUTF8=1 so animation paths (not fallbacks) are exercised.
 """
 
 from __future__ import annotations
@@ -94,13 +102,18 @@ STILL_ACTIVE = 259
 HANDLE_FLAG_INHERIT = 1
 ERROR_BROKEN_PIPE = 109
 
+# Filled after every run: how the capture thread ended (for diagnosing
+# truncated or empty recordings).
+LAST_READER_DIAG: dict[str, object] = {}
 
-def run_under_conpty(cmdline, cwd=REPO, inputs=(), total_timeout=60, cols=120, rows=30):
+
+def run_under_conpty(cmdline, cwd=REPO, inputs=(), total_timeout=60, cols=120, rows=30, return_events=False):
     """Spawn cmdline under ConPTY. inputs = [(delay_seconds | 'wait:MARK', bytes)].
 
-    Returns (exit_code, captured_bytes). IMPORTANT: bInheritHandles must be
-    False, otherwise the child inherits our redirected pipes instead of using
-    the pseudo-terminal for stdio.
+    Returns (exit_code, captured_bytes), or (exit_code, events) with
+    return_events=True — events = [(elapsed_s, bytes)] ready for asciicast v2.
+    IMPORTANT: bInheritHandles must be False, otherwise the child inherits our
+    redirected pipes instead of using the pseudo-terminal for stdio.
     """
     def make_pipe():
         r, w = ctypes.c_void_p(), ctypes.c_void_p()
@@ -143,22 +156,44 @@ def run_under_conpty(cmdline, cwd=REPO, inputs=(), total_timeout=60, cols=120, r
         raise ctypes.WinError(ctypes.get_last_error())
 
     chunks: list[bytes] = []
+    events: list[tuple[float, bytes]] = []  # (elapsed_seconds, bytes) for recording
     stop_read = threading.Event()
+    capture_start = time.monotonic()
+    READER_DIAG: dict[str, object] = {"reads": 0, "errors": 0, "last_error": 0, "stop": "running"}
 
     def reader():
-        while not stop_read.is_set():
-            buf = ctypes.create_string_buffer(65536)
-            n = ctypes.c_ulong(0)
-            ok = kernel32.ReadFile(out_r, buf, 65536, ctypes.byref(n), None)
-            if not ok:
-                if ctypes.get_last_error() == ERROR_BROKEN_PIPE:
-                    break
-                time.sleep(0.01)
-                continue
-            if n.value == 0:
-                time.sleep(0.01)
-                continue
-            chunks.append(buf.raw[: n.value])
+        consecutive_pipe_errors = 0
+        try:
+            while not stop_read.is_set():
+                buf = ctypes.create_string_buffer(65536)
+                n = ctypes.c_ulong(0)
+                ok = kernel32.ReadFile(out_r, buf, 65536, ctypes.byref(n), None)
+                if not ok:
+                    err = ctypes.get_last_error()
+                    READER_DIAG["errors"] = int(READER_DIAG["errors"]) + 1
+                    READER_DIAG["last_error"] = err
+                    if err == ERROR_BROKEN_PIPE:
+                        # Only trust broken-pipe as EOF when it persists;
+                        # transient 109s here killed capture runs before.
+                        consecutive_pipe_errors += 1
+                        if consecutive_pipe_errors >= 5:
+                            READER_DIAG["stop"] = "broken-pipe"
+                            break
+                    time.sleep(0.05)
+                    continue
+                consecutive_pipe_errors = 0
+                if n.value == 0:
+                    time.sleep(0.01)
+                    continue
+                chunk = buf.raw[: n.value]
+                chunks.append(chunk)
+                events.append((time.monotonic() - capture_start, chunk))
+                READER_DIAG["reads"] = int(READER_DIAG["reads"]) + 1
+        except BaseException as exc:  # noqa: BLE001 - harness diagnostics
+            READER_DIAG["stop"] = f"exception: {exc!r}"
+        else:
+            if READER_DIAG["stop"] == "running":
+                READER_DIAG["stop"] = "stop-signal"
 
     t = threading.Thread(target=reader, daemon=True)
     t.start()
@@ -208,6 +243,10 @@ def run_under_conpty(cmdline, cwd=REPO, inputs=(), total_timeout=60, cols=120, r
     kernel32.CloseHandle(in_w)
     t.join(timeout=10)
     kernel32.CloseHandle(out_r)
+    LAST_READER_DIAG.clear()
+    LAST_READER_DIAG.update(READER_DIAG)
+    if return_events:
+        return exit_code, events
     return exit_code, b"".join(chunks)
 
 

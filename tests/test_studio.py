@@ -247,6 +247,24 @@ def test_blocks_key_dispatch(monkeypatch, tmp_path):
     assert handle_key(st, "p", out) == "play"
 
 
+def test_play_in_studio_pause_only_when_interactive(monkeypatch):
+    import crazy_type.studio as sm
+    from crazy_type.studio import play_in_studio
+
+    st = make_state()
+    out = io.StringIO()
+    calls = []
+    monkeypatch.setattr(sm, "read_key", lambda: calls.append("paused") or "enter")
+    # Interactive + out is a stand-in for stdout -> pause happens.
+    monkeypatch.setattr(sm.sys, "stdout", out)
+    play_in_studio(st, out, interactive=True)
+    assert calls == ["paused"]
+    # Non-interactive (cast/scripted) -> no pause, even with out == stdout.
+    calls.clear()
+    play_in_studio(st, out, interactive=False)
+    assert calls == []
+
+
 def test_screen_hints_footer_on_every_screen():
     from crazy_type.studio import _SCREEN_HINTS
 

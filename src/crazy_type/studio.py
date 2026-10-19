@@ -337,8 +337,14 @@ def block_detail(block: dict[str, Any]) -> str:
 
 
 def render(state: Studio, out: Any, cols: int, rows: int) -> None:
-    """Draw one full frame of the editor."""
+    """Draw one full frame of the editor.
+
+    Lines are truncated to w-1 (never the last column): writing exactly to
+    the right margin puts VT terminals in deferred-wrap state, which ConPTY
+    then re-syncs endlessly (observed as cup(lastcol)+fragments garbage).
+    """
     w = max(cols, MIN_COLS)
+    m = w - 1  # safe line width
 
     def write(text: str) -> None:
         # CRLF: a bare LF only moves down, leaving the column staggered on
@@ -348,24 +354,24 @@ def render(state: Studio, out: Any, cols: int, rows: int) -> None:
     title = f" Crazy Type Studio - {state.recipe['name']}"
     if state.dirty:
         title += " *"
-    write(BOLD + title[:w] + RESET + "\n")
-    write(DIM + f" Message: {state.message}"[:w] + RESET + "\n")
+    write(BOLD + title[:m] + RESET + "\n")
+    write(DIM + f" Message: {state.message}"[:m] + RESET + "\n")
     # NOTE: ASCII rule below so Studio survives non-UTF-8 consoles (e.g. a
     # default-CP ConPTY); the animation engine itself still needs UTF-8.
-    write("-" * min(w, 200) + "\n")
+    write("-" * min(m, 200) + "\n")
     if state.screen == "blocks":
-        _render_blocks(state, write, w, rows)
+        _render_blocks(state, write, m, rows)
     elif state.screen == "edit":
-        _render_edit(state, write, w, rows)
+        _render_edit(state, write, m, rows)
     elif state.screen == "add":
-        _render_add(state, write, w)
+        _render_add(state, write, m)
     elif state.screen == "effect":
-        _render_effects(state, write, w, rows)
+        _render_effects(state, write, m, rows)
     elif state.screen == "help":
-        _render_help(write, w)
-    write("-" * min(w, 200) + "\n")
-    write(DIM + _SCREEN_HINTS.get(state.screen, "")[:w] + RESET + "\n")
-    write((DIM + state.status[:w] + RESET + "\n"))
+        _render_help(write, m)
+    write("-" * min(m, 200) + "\n")
+    write(DIM + _SCREEN_HINTS.get(state.screen, "")[:m] + RESET + "\n")
+    write((DIM + state.status[:m] + RESET + "\n"))
     write(" ?/F1 help, q back/quit\n")
 
 
@@ -508,7 +514,7 @@ def prompt_line(prompt_text: str, out: Any) -> str:
         if key == "backspace":
             buf = buf[:-1]
             draw()
-        elif len(key) == 1 and key.isprintable():
+        elif len(key) == 1 and key.isprintable() and len(prompt_text) + len(buf) < 78:
             buf.append(key)
             draw()
         # Any other key (arrows, etc.) is ignored while editing text.
@@ -530,6 +536,16 @@ def run_studio(
 
     out = sys.stdout if out is None else out
     source = iter(keys) if keys is not None else None
+
+    trace_path = os.environ.get("CRAZYTYPE_TRACE")
+
+    def trace(message: str) -> None:
+        if trace_path:
+            try:
+                with open(trace_path, "a", encoding="utf-8") as handle:
+                    handle.write(message + "\n")
+            except OSError:
+                pass
 
     def next_key() -> str:
         if source is not None:
@@ -573,14 +589,17 @@ def run_studio(
     try:
         while True:
             cols, rows = term_size()
+            trace(f"render screen={state.screen} selected={state.selected} dirty={state.dirty}")
             render(state, out, cols, rows)
             out.flush()
             key = next_key()
+            trace(f"key={key!r}")
             result = handle_key(state, key, out)
+            trace(f"result={result!r} status={state.status!r}")
             if result == "quit":
                 return 0
             if result == "play":
-                play_in_studio(state, out)
+                play_in_studio(state, out, interactive=source is None)
     except KeyboardInterrupt:
         return 130
     finally:
@@ -774,8 +793,12 @@ def open_recipe(state: Studio, out: Any) -> None:
     state.status = f"opened {loaded['name']}"
 
 
-def play_in_studio(state: Studio, out: Any) -> None:
-    """Preview with the real runtime: leave the alt screen, play, come back."""
+def play_in_studio(state: Studio, out: Any, interactive: bool = True) -> None:
+    """Preview with the real runtime: leave the alt screen, play, come back.
+
+    interactive=False skips the "press Enter" pause (injected-key sessions
+    like cast recording, where there is no human at the keyboard).
+    """
     from .runtime import play_recipe
 
     out.write(ALT_EXIT + SHOW)
@@ -791,7 +814,7 @@ def play_in_studio(state: Studio, out: Any) -> None:
         state.status = f"preview exited with code {code}"
     else:
         state.status = "preview finished - that is exactly what the CLI will play"
-        if out is sys.stdout:
+        if interactive and out is sys.stdout:
             out.write("\x1b[H\x1b[KEnter to return to Studio... ")
             out.flush()
             try:
