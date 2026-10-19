@@ -44,6 +44,27 @@ def test_non_tty_defaults_to_plain(monkeypatch, capsys):
     assert ANSI_RE.search(out) is None
 
 
+def test_cp1252_tty_falls_back_cleanly(monkeypatch, capsys):
+    # A TTY whose encoding cannot render glyphs must get plain text,
+    # not a UnicodeEncodeError traceback (seen on a default-CP ConPTY).
+    import io as _io
+
+    class Cp1252Out(_io.StringIO):
+        encoding = "cp1252"
+
+        def isatty(self):
+            return True
+
+    fake = Cp1252Out()
+    monkeypatch.setattr(sys, "stdout", fake)
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
+    code = cli.main(["hi", "--effect", "decrypt"])
+    out, err = fake.getvalue(), capsys.readouterr().err
+    assert code == 0
+    assert out.strip() == "hi"
+    assert "chcp 65001" in err
+
+
 def test_no_input_is_usage_error(monkeypatch, capsys):
     monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
     monkeypatch.setattr(sys.stdout, "isatty", lambda: False)
@@ -68,6 +89,52 @@ def test_doctor_json_valid_no_ansi(monkeypatch, capsys):
     assert payload["crazytype"]
     assert payload["effects_count"] >= 10
     assert ANSI_RE.search(out) is None
+
+
+def _run(monkeypatch, capsys, argv, tty=False):
+    monkeypatch.setattr(sys.stdout, "isatty", lambda: tty)
+    return cli.main(argv), capsys.readouterr()
+
+
+def test_routing_blocks_human_and_json(monkeypatch, capsys):
+    code, cap = _run(monkeypatch, capsys, ["blocks"])
+    assert code == 0 and "tte" in cap.out
+    code, cap = _run(monkeypatch, capsys, ["blocks", "--json"])
+    assert code == 0 and json.loads(cap.out)["recipe_format_version"] == 1
+
+
+def test_routing_play_errors(monkeypatch, capsys):
+    code, cap = _run(monkeypatch, capsys, ["play", "no-such-recipe"])
+    assert code == 2 and "not found" in cap.err
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
+    code, cap = _run(monkeypatch, capsys, ["play", "giant-growth"])
+    assert code == 2 and "no input" in cap.err
+
+
+def test_routing_export_errors(monkeypatch, capsys):
+    code, cap = _run(monkeypatch, capsys, ["export", "giant-growth", "Hi"])
+    assert code == 2 and "--recipe" in cap.err
+    code, cap = _run(monkeypatch, capsys, ["export", "nope", "Hi", "--recipe", "x.json"])
+    assert code == 2
+
+
+def test_routing_studio_bad_recipe(monkeypatch, capsys):
+    code, cap = _run(monkeypatch, capsys, ["studio", "no-such-recipe"])
+    assert code == 2
+
+
+def test_routing_subcommand_help(monkeypatch, capsys):
+    for argv in (["play", "--help"], ["studio", "--help"], ["export", "--help"],
+                 ["blocks", "--help"], ["effects", "--help"]):
+        with pytest.raises(SystemExit) as exc:
+            _run(monkeypatch, capsys, argv)
+        assert exc.value.code == 0
+
+
+def test_routing_dashdash_literal_text(monkeypatch, capsys):
+    # `crazytype --plain -- effects` must animate the word, not list effects.
+    code, out, _ = run_cli(monkeypatch, capsys, ["--plain", "--", "effects"])
+    assert code == 0 and out.strip() == "effects"
 
 
 def test_unknown_effect_suggests(monkeypatch, capsys):

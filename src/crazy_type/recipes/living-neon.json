@@ -1,0 +1,9 @@
+{
+  "format_version": 1,
+  "name": "living-neon",
+  "description": "Readable text with a gentle travelling shimmer and occasional brief glitches.",
+  "seed": 11,
+  "blocks": [
+    { "kind": "ambient", "duration_seconds": 12.0, "fps": 10, "seed": 11 }
+  ]
+}

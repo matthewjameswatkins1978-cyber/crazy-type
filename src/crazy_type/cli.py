@@ -64,6 +64,9 @@ def build_parser() -> argparse.ArgumentParser:
             "  crazytype --demo\n"
             "  crazytype effects\n"
             "  crazytype doctor --json\n"
+            "  crazytype play giant-growth \"Hello\"\n"
+            "  crazytype blocks --json\n"
+            "  crazytype studio [recipe]\n"
             "\nSet CRAZYTYPE_PLAIN=1 or pass --plain to disable animation. "
             "NO_COLOR, CI, dumb terminals and reduced-motion preferences are respected."
         ),
@@ -93,7 +96,7 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-_SUBCOMMANDS = ("effects", "doctor")
+_SUBCOMMANDS = ("effects", "doctor", "play", "blocks", "studio", "export")
 
 
 def parse_subcommand(argv: list[str]) -> int | None:
@@ -106,6 +109,35 @@ def parse_subcommand(argv: list[str]) -> int | None:
     if not argv or argv[0] not in _SUBCOMMANDS or argv[0].startswith("-"):
         return None
     command = argv[0]
+    if command == "play":
+        sub = argparse.ArgumentParser(prog="crazytype play")
+        sub.add_argument("recipe", help="Recipe file (.json) to play.")
+        sub.add_argument("text", nargs="?", help="Text to animate. Reads piped stdin when omitted.")
+        sub_args = sub.parse_args(argv[1:])
+        return cmd_play(sub_args.recipe, sub_args.text)
+    if command == "studio":
+        sub = argparse.ArgumentParser(prog="crazytype studio")
+        sub.add_argument("recipe", nargs="?", help="Recipe name or .json path to open (blank if omitted).")
+        sub.add_argument(
+            "--demo",
+            action="store_true",
+            help="Play the recipe once, then open the editor ready to remix it.",
+        )
+        sub_args = sub.parse_args(argv[1:])
+        return cmd_studio(sub_args.recipe, demo=sub_args.demo)
+    if command == "blocks":
+        sub = argparse.ArgumentParser(prog="crazytype blocks")
+        sub.add_argument("--json", action="store_true", help="Machine-readable block catalogue.")
+        sub_args = sub.parse_args(argv[1:])
+        return cmd_blocks(sub_args.json)
+    if command == "export":
+        sub = argparse.ArgumentParser(prog="crazytype export")
+        sub.add_argument("recipe", help="Recipe name or .json path.")
+        sub.add_argument("text", nargs="?", help="Text to perform. Reads piped stdin when omitted.")
+        sub.add_argument("--recipe", dest="recipe_out", default=None, help="Write validated recipe JSON here.")
+        sub.add_argument("--cast", dest="cast_out", default=None, help="Write asciicast v2 recording here.")
+        sub_args = sub.parse_args(argv[1:])
+        return cmd_export(sub_args.recipe, sub_args.text, sub_args.recipe_out, sub_args.cast_out)
     sub = argparse.ArgumentParser(prog=f"crazytype {command}")
     sub.add_argument("--json", action="store_true", help="Machine-readable JSON output (no ANSI codes).")
     sub_args = sub.parse_args(argv[1:])
@@ -176,6 +208,100 @@ def cmd_doctor(as_json: bool) -> int:
         for key, value in payload.items():
             print(f"{key}: {value}")
     return 0
+
+
+def cmd_play(recipe_source: str, arg_text: str | None) -> int:
+    from .recipe import RecipeError, load_recipe
+    from .runtime import play_recipe
+
+    try:
+        recipe = load_recipe(_builtin_or_path(recipe_source))
+    except RecipeError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    raw = read_input(arg_text)
+    if raw is None:
+        print("error: no input. Give text or pipe it in. See 'crazytype play --help'.", file=sys.stderr)
+        return 2
+    text = raw.strip("\n")
+    if not text.strip():
+        print("error: no input (empty text).", file=sys.stderr)
+        return 1
+    return play_recipe(recipe, text)
+
+
+def _builtin_or_path(source: str) -> str:
+    """Allow bundled recipe names ('giant-growth') as shorthand for their files."""
+    import importlib.resources
+
+    try:
+        bundled = importlib.resources.files("crazy_type") / "recipes" / f"{source}.json"
+        if bundled.is_file():
+            return str(bundled)
+    except Exception:  # noqa: BLE001 - fall through to plain path handling
+        pass
+    return source
+
+
+def cmd_blocks(as_json: bool) -> int:
+    from .recipe import BLOCK_SPECS, block_catalogue
+
+    if as_json:
+        print(json.dumps(block_catalogue(), indent=2))
+        return 0
+    print("Recipe blocks (see 'crazytype blocks --json' for the machine-readable catalogue):\n")
+    for kind, spec in BLOCK_SPECS.items():
+        print(f"  {kind} - {spec['help']}")
+    print("\nBundled recipes: giant-growth, living-neon, particle-reconstruction")
+    print("Try: crazytype play giant-growth \"Hello\"")
+    return 0
+
+
+def cmd_export(recipe_arg: str, arg_text: str | None, recipe_out: str | None, cast_out: str | None) -> int:
+    from .export import export_recipe
+    from .recipe import RecipeError, load_recipe
+
+    try:
+        recipe = load_recipe(_builtin_or_path(recipe_arg))
+    except RecipeError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    if cast_out is None and recipe_out is None:
+        print("error: give --recipe and/or --cast output paths. See 'crazytype export --help'.", file=sys.stderr)
+        return 2
+    raw = read_input(arg_text)
+    if raw is None:
+        print("error: no input. Give text or pipe it in.", file=sys.stderr)
+        return 2
+    text = raw.strip("\n")
+    if not text.strip():
+        print("error: no input (empty text).", file=sys.stderr)
+        return 1
+    return export_recipe(recipe, text, recipe_out, cast_out)
+
+
+def cmd_studio(recipe_arg: str | None, demo: bool = False) -> int:
+    from .recipe import RecipeError, load_recipe
+    from .studio import Studio, blank_recipe, run_studio
+
+    if recipe_arg:
+        try:
+            recipe = load_recipe(_builtin_or_path(recipe_arg))
+        except RecipeError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+        path = recipe_arg
+    else:
+        recipe = blank_recipe()
+        path = None
+    state = Studio(recipe)
+    # Only real user files are save destinations; bundled shorthands and
+    # package-internal paths must ask instead of writing junk or overwriting
+    # shipped data (see saveable_path).
+    from .studio import saveable_path
+
+    state.path = saveable_path(path)
+    return run_studio(state, auto_preview=demo)
 
 
 def cmd_demo() -> int:

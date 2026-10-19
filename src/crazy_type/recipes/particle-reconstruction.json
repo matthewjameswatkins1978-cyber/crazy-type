@@ -1,0 +1,9 @@
+{
+  "format_version": 1,
+  "name": "particle-reconstruction",
+  "description": "A word crumbles to dust, is vacuumed up, and reforms — destruction and reconstruction.",
+  "seed": 3,
+  "blocks": [
+    { "kind": "tte", "effect": "crumble", "mode": "stacked", "params": {} }
+  ]
+}

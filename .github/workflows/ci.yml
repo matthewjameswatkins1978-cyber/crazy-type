@@ -1,0 +1,19 @@
+# Minimal CI: install with uv and run the suite on Linux + Windows.
+# Runs on pushes and pull requests. No releases, no publishing.
+
+name: ci
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync --group dev
+      - run: uv run pytest -q
