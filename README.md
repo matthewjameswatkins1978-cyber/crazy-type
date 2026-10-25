@@ -69,4 +69,4 @@ See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). Crazy Type itself is MIT â
 ## Versioning
 
 Follows Matthew's rule: `v0.<feature>.<fix>` while pre-1.0, patch bumps for
-fixes, minor bumps for features. This release is **v0.1.0**.
+fixes, minor bumps for features. This release is **v0.1.1**.
